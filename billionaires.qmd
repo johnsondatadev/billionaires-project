@@ -1,0 +1,8 @@
+---
+title: "An Analysis of Billionaires of the World"
+author: "Akash Agrawal Bejarano, Ama K. Appau, Johnson Odejide, Josh Hall"
+format: html
+editor: visual
+---
+
+## 
