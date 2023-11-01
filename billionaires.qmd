@@ -1,8 +1,68 @@
 ---
 title: "An Analysis of Billionaires of the World"
-author: "Akash Agrawal Bejarano, Ama K. Appau, Johnson Odejide, Josh Hall"
-format: html
+author:
+  - name: "Akash Agrawal Bejarano, Ama K. Appau, Johnson Odejide, Josh Hall"
+    email: {}, {}, bo5104a@american.edu, {}
+    affiliation: 
+      - name: American University
+        city: Washington
+        state: DC
+        url: www.american.edu
+copyright: 
+  holder: Machine Teachers
+  year: 2023
+format: 
+  pdf:
+    toc: true
+    toc-title: Table of Contents
+    toc-location: left
+    toc-depth: 2
+    toc-expand: true
 editor: visual
+execute: 
+  warning: false
+  error: false
+theme: 
+  light: flatly
+  dark: darkly
 ---
 
+## 01. Problem Definition
+
+Here, we define the goals, objectives, and success criteria for your machine learning project as well as determine what type of problem it is (classification, regression, clustering, etc.).
+
+## 02. Data Collection
+
+## 03. EDA
+
+Here, we explore and visualize the data to gain insights, identifying patterns, trends, and potential outliers. We assess the distribution of variables, consider the relationships between variables.
+
+## 04. Data Preprocessing
+
+Here, we handle missing data and outliers, normalize or standardize data if necessary. We encode categorical variables and split the data into training, validation, and test sets.
+
+## 05. Feature Engineering
+
+Here, we create relevant features from the raw data. We perform feature selection to identify the most important features, applying domain knowledge to transform data effectively.
+
+## 06. Model Selection
+
+In this section, we choose the appropriate machine learning algorithms for our problem, experiment with different models and techniques to find the best one. We tune hyperparameters for optimal performance.
+
+## 07. Model Training
+
+Here, we train the selected model on the training data monitor the model performance on the validation set.
+
+## 08. Model Evaluation
+
+Here, we evaluate the model's performance using appropriate metrics (e.g., accuracy, RMSE). Compare the model's performance to baselines and expectations.
+
+## 09. Model Validation
+
+Here, we use the test data to assess the model's generalization performance to ensure that the model performs well on unseen data.
+
 ## 
+
+## 10. Ethical Considerations
+
+This is not a section perse, it's just for us to ensure that the model and data collection processes adhere to ethical guidelines and do not perpetuate biases or harm.
