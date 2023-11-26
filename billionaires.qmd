@@ -37,31 +37,57 @@ Here, we define the goals, objectives, and success criteria for your machine lea
 
 Here, we explore and visualize the data to gain insights, identifying patterns, trends, and potential outliers. We assess the distribution of variables, consider the relationships between variables.
 
+```{r EDA}
+
+```
+
 ## 04. Data Preprocessing
 
 Here, we handle missing data and outliers, normalize or standardize data if necessary. We encode categorical variables and split the data into training, validation, and test sets.
+
+```{r DataProcessing}
+
+```
 
 ## 05. Feature Engineering
 
 Here, we create relevant features from the raw data. We perform feature selection to identify the most important features, applying domain knowledge to transform data effectively.
 
+```{r FeatureEngineering}
+
+```
+
 ## 06. Model Selection
 
 In this section, we choose the appropriate machine learning algorithms for our problem, experiment with different models and techniques to find the best one. We tune hyperparameters for optimal performance.
+
+```{r ModelSelection}
+
+```
 
 ## 07. Model Training
 
 Here, we train the selected model on the training data monitor the model performance on the validation set.
 
+```{r ModelTraining}
+
+```
+
 ## 08. Model Evaluation
 
 Here, we evaluate the model's performance using appropriate metrics (e.g., accuracy, RMSE). Compare the model's performance to baselines and expectations.
+
+```{r ModelEvaluation}
+
+```
 
 ## 09. Model Validation
 
 Here, we use the test data to assess the model's generalization performance to ensure that the model performs well on unseen data.
 
-## 
+```{r ModelValidation}
+
+```
 
 ## 10. Ethical Considerations
 
