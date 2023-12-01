@@ -113,6 +113,8 @@ Here, we explore and visualize the data to gain insights, identifying patterns, 
 
 ```{r}
 library(tidyverse)
+library(tidymodels)
+library(recipeselectors)
 library(dplyr)
 library(ggplot2)
 ```
@@ -256,7 +258,11 @@ Here, we train the selected model on the training data monitor the model perform
 
 Here, we evaluate the model's performance using appropriate metrics (e.g., accuracy, RMSE). Compare the model's performance to baselines and expectations.
 
-```{r ModelEvaluation}
+```{r ModelEvaluation_LogisticClassification}
+
+```
+
+```{r ModelEvaluation_KNNClassification}
 
 ```
 
