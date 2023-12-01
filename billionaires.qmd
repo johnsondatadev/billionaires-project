@@ -114,9 +114,10 @@ Here, we explore and visualize the data to gain insights, identifying patterns, 
 ```{r}
 library(tidyverse)
 library(tidymodels)
-library(recipeselectors)
+# library(recipeselectors)
 library(dplyr)
 library(ggplot2)
+library(leaps)
 ```
 
 ```{r}
@@ -244,6 +245,31 @@ table(Ytesting,D)
 ```{r}
 cr = (table(Ytesting, D)[1, 1] + table(Ytesting, D)[2, 2])/(0.3*nrow(Classbill1))
 paste("The classification rate is", cr)
+```
+
+```{r ModelSelection_linear}
+# Using regression to predict final worth, therefore necessary to remove rank as it is directly correlated to final worth
+set.seed(123)
+training <- .70
+
+minus_rank <- Classbill |>
+  select(-rank)
+
+z <- sample(nrow(minus_rank), floor(training*nrow(minus_rank)))
+lm_train <- minus_rank[z,] 
+lm_test <- minus_rank[-z,] 
+
+full_base_model <- lm(finalWorth ~ ., data = lm_train)
+summary(full_base_model)
+```
+
+```{r ModelSelection_R2BICCIP}
+which.max(full_base_model$adjr2)
+```
+
+```{r ModelSelection_Stepwise}
+null_model <- lm(finalWorth ~ 1, data = Ttrain)
+reg_step = step(full_base_model, scope = list(lower = null_model, upper = full_base_model), method = "backward") 
 ```
 
 ## 07. Model Training
