@@ -118,6 +118,7 @@ library(tidymodels)
 library(dplyr)
 library(ggplot2)
 library(leaps)
+library(glmnet)
 ```
 
 ```{r}
@@ -263,13 +264,99 @@ full_base_model <- lm(finalWorth ~ ., data = lm_train)
 summary(full_base_model)
 ```
 
-```{r ModelSelection_R2BICCIP}
-which.max(full_base_model$adjr2)
+```{r ModelSelection_R2BICCPSetup}
+# Set up for obtaining results
+reg.fit <- regsubsets(finalWorth ~ ., data = lm_train, nvmax = 10)
+sum_reg <- summary(reg.fit)
+```
+
+```{r r2}
+# R2
+sum_reg$adjr2
+which.max(sum_reg$adjr2)
+```
+
+```{r BIC}
+#BIC
+which.min(sum_reg$bic)
+sum_reg$which[which.min(sum_reg$bic),]
+```
+
+```{r CP}
+# Cp
+which.min(abs(sum_reg$cp - 0:10))
+sum_reg$which[which.min(abs(sum_reg$cp - 0:10)),]
 ```
 
 ```{r ModelSelection_Stepwise}
-null_model <- lm(finalWorth ~ 1, data = Ttrain)
-reg_step = step(full_base_model, scope = list(lower = null_model, upper = full_base_model), method = "backward") 
+null_model <- lm(finalWorth ~ 1, data = lm_train)
+reg_step <- step(full_base_model, scope = list(lower = null_model, upper = full_base_model), method = "backward") # For some reason not running? 
+```
+
+```{r Lasso_Ridge_Setup}
+# Creating validation set and design matrices for train and test
+set.seed(123)
+
+x_train <- model.matrix(full_base_model)[,-1]
+y_train <- lm_train$finalWorth
+
+reg_test <- lm(finalWorth ~ ., data = minus_rank) 
+x_test <- model.matrix(reg_test)[,-1]
+y_test <- lm_test$finalWorth
+```
+
+```{r Ridge}
+# Using cross validation results to select lambda
+set.seed(123)
+r_train_cv <- cv.glmnet(x_train, y_train, alpha = 0 )
+r_train_cv
+```
+
+```{r RidgePlot}
+plot(r_train_cv)
+```
+
+```{r RidgeCont}
+ridge_min <- glmnet(x_train, y_train, alpha = 0, lambda = r_train_cv$lambda.min)
+yHat <- predict(ridge_min, newx = x_test, s = "lambda.min")
+pmse_r <-  mean((yHat - y_test)^2)
+pmse_r
+ridge_min$df
+```
+
+```{r Lasso}
+set.seed(123)
+l_train_cv <- cv.glmnet(x_train, y_train) # default alpha=1
+l_train_cv
+```
+
+```{r LassoPlot}
+plot(l_train_cv)
+```
+
+```{r LassoCont}
+lasso_1se <- glmnet(x_train, y_train, lambda = l_train_cv$lambda.1se)
+coef(lasso_1se)
+```
+
+```{r LassoCalculations}
+Hat <- predict(lasso_1se, newx = x_test, s = "lambda.1se")
+pmse_l1se <- mean((yHat - y_test)^2)
+pmse_l1se
+
+lasso_1se$df
+```
+
+```{r LassoMin}
+lasso_min <- glmnet(x_train, y_train, lambda = l_train_cv$lambda.min)
+
+coef(lasso_min)
+
+yHat <- predict(lasso_min, newx = x_test, s = "lambda.min")
+pmse_lmin <- mean((yHat - y_test)^2)
+pmse_lmin
+
+lasso_min$df
 ```
 
 ## 07. Model Training
