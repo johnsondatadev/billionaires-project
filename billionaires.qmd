@@ -37,6 +37,38 @@ Here, we define the goals, objectives, and success criteria for your machine lea
 
 Here, we explore and visualize the data to gain insights, identifying patterns, trends, and potential outliers. We assess the distribution of variables, consider the relationships between variables.
 
+```{r}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+data <- read_csv("data/Billionaires.csv", show_col_types = F)
+head(data)
+glimpse(data)
+colSums(is.na(data))
+```
+
+```{r}
+#I removed the columns with a lot of NAs and the ones which we wont use like latitude and longitude
+dim(data)
+data <- mutate(data, age = na_if(age, -1))
+data <- data[-c(4,6:11,13,15:24,26,28,29,31,34,35)]
+```
+
+```{r}
+#omitted all nas and then parsed the gdp column to make it numeric
+colSums(is.na(data))
+data2<- na.omit(data)
+dim(data2)
+colSums(is.na(data2))
+Classbill <-
+  data2 |>
+relocate(selfMade,.before = rank)
+Classbill$gdp_country = as.numeric(gsub("[\\$,]", "", Classbill$gdp_country))
+```
+
 ```{r EDA}
 
 ```
@@ -61,8 +93,76 @@ Here, we create relevant features from the raw data. We perform feature selectio
 
 In this section, we choose the appropriate machine learning algorithms for our problem, experiment with different models and techniques to find the best one. We tune hyperparameters for optimal performance.
 
-```{r ModelSelection}
+```{r ModelSelection_LogisticClassification}
+#Classification LOGISTIC to predict whether the billonaire is self made or not
+set.seed(123)
+training <- .70
+s<- sample(nrow(Classbill), floor(training*nrow(Classbill)))
+Ttrain<-Classbill[s,] 
+Ttest<-Classbill[-s,] 
 
+a<-  glm(as.factor(selfMade) ~ ., family = "binomial", data = Ttrain)
+
+Testp<- predict(a, type = "response",  newdata = Ttest)
+
+threshold <- seq(0, 1, .01)
+TPR <-  FPR <- err.rate <- rep(0, length(threshold))
+
+
+for (i in seq_along(threshold)) {
+Yhat <- rep(NA_character_, nrow(Ttest)) 
+Yhat <-  ifelse(Testp >= threshold[[i]], "TRUE", "FALSE")
+
+err.rate[i] <- mean(Yhat != Ttest$selfMade)
+TPR[[i]] <- sum(Yhat == "TRUE" & Ttest$selfMade == "FALSE")/
+  sum(Ttest$selfMade == "TRUE")
+FPR[[i]] <- sum(Yhat == "TRUE" & Ttest$selfMade == "FALSE")/
+  sum(Ttest$selfMade == "FALSE")
+}
+
+table(Ttest$selfMade)
+min(err.rate)
+threshold[which.min(err.rate)]
+```
+
+```{r ModelSelection_KNNClassification}
+#removing the categorical predictors category and gender
+Classbill1 =Classbill[-c(4,6)]
+library(class)
+set.seed(123)
+training <- .70
+s<- sample(nrow(Classbill1), floor(training*nrow(Classbill1)))
+
+Xtraining<-Classbill1[s,2:9] 
+Ytraining<- Classbill1$selfMade[s]  
+Xtesting <- Classbill1[-s,2:9]
+Ytesting <- Classbill1$selfMade[-s]
+
+z <- rep(1:50)
+x <- rep(1:50)
+c <- rep(1:50)
+
+for (k in 1:50){
+  D <- knn(Xtraining, Xtesting, Ytraining, k = k) 
+  z[k] <- mean(D != Ytesting) 
+  x[k] <- sum(D == 1 & Ytesting == 1) / sum(Ytesting == 1) 
+  c[k] <- sum(D == 1 & Ytesting == 0) / sum(Ytesting == 0)  
+}
+
+paste("The k which minimizes the prediction error rate is",which.min(z))
+paste("The associated error rate is", z[which.min(z)])
+```
+
+```{r}
+set.seed(123)
+training <- .70
+D <- knn(Xtraining, Xtesting, Ytraining, k = 14) 
+table(Ytesting,D)
+```
+
+```{r}
+cr = (table(Ytesting, D)[1, 1] + table(Ytesting, D)[2, 2])/(0.3*nrow(Classbill1))
+paste("The classification rate is", cr)
 ```
 
 ## 07. Model Training
