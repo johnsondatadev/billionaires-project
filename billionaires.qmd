@@ -141,7 +141,23 @@ data <- data[-c(4,6:11,13,15:24,26,28,29,31,34,35)]
 ```
 
 ```{r EDA}
+# Comparing male and female final worth
+data |> 
+  ggplot(aes(finalWorth, fill = gender)) + 
+  geom_density(alpha = 0.8) +
+  scale_x_log10()
 
+# Comparing selfmade billionaires
+data |> 
+  ggplot(aes(finalWorth, fill = selfMade)) + 
+  geom_density(alpha = 0.8) +
+  scale_x_log10()
+
+data |> 
+  ggplot(aes(x = industries, finalWorth)) +
+  geom_histogram(aes(fill = selfMade), stat = "identity") +
+  coord_flip() +
+  facet_wrap(~ gender)
 ```
 
 ## 04. Data Preprocessing
