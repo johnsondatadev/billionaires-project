@@ -137,7 +137,15 @@ data <- data[-c(4,6:11,13,15:24,26,28,29,31,34,35)]
 ```
 
 ```{r}
+tibble_df_cleaned <- 
+  tibble_df |> 
+  mutate(gdp_country = gsub("[$ ,]", "", gdp_country)) |> 
+  mutate(gdp_country = as.numeric(gdp_country))
 
+head(tibble_df_cleaned)
+# |> 
+#   head()
+#   mutate(gdp_country = )
 ```
 
 ```{r EDA}
@@ -164,6 +172,16 @@ data |>
 
 Here, we handle missing data and outliers, normalize or standardize data if necessary. We encode categorical variables and split the data into training, validation, and test sets.
 
+Some Data Cleaning
+
+`gpd_country`, for example, was formatted as 2,000,000. It was cleaned to remove the \\\$ and the commas.
+
+`SelfMade` was transformed from **TRUE/FALSE** to `yes/no`
+
+`category`, `industries`, `gender`, status were cast to factor type.
+
+The resultant cleaned data is stored in a variable called **`cleaned_df`**
+
 ```{r DataProcessing}
 #omitted all nas and then parsed the gdp column to make it numeric
 colSums(is.na(data))
@@ -173,9 +191,33 @@ colSums(is.na(cleaned_data))
 
 Classbill <-
   cleaned_data |>
-relocate(selfMade,.before = rank)
+  relocate(selfMade,.before = rank)
 
 Classbill$gdp_country = as.numeric(gsub("[\\$,]", "", Classbill$gdp_country))
+
+# (Classbill$category) 
+# (Classbill$industries)
+# levels(as.factor(Classbill$title))
+# head(Classbill)
+```
+
+```{r}
+cleaned_df <- 
+  Classbill |> 
+  mutate(selfMade = ifelse(selfMade, 'yes', 'no')) |> 
+  mutate(selfMade = as.factor(selfMade),
+         category = as.factor(category),
+         industries = as.factor(industries),
+         gender = as.factor(gender),
+         status = as.factor(status),
+         country = as.factor(country)) |> 
+  select(-country, -personName, -birthMonth, -birthDay, -c(cpi_country : longitude_country)) 
+
+cleaned_df <- na.omit(cleaned_df)
+summary(cleaned_df)
+
+# tail(cleaned_df)
+sapply(lapply(cleaned_df, unique), length)
 ```
 
 ## 05. Feature Engineering
@@ -183,12 +225,58 @@ Classbill$gdp_country = as.numeric(gsub("[\\$,]", "", Classbill$gdp_country))
 Here, we create relevant features from the raw data. We perform feature selection to identify the most important features, applying domain knowledge to transform data effectively.
 
 ```{r FeatureEngineering}
+cleaned_df_lr <- 
+  cleaned_df |> 
+  select(-city)
 
+head(cleaned_df)
+# 
+# c("country", ["cpi_country" : "longitude_country"])
+# 
+summary(lm(finalWorth ~ ., cleaned_df_lr))
 ```
 
 ## 06. Model Selection
 
 In this section, we choose the appropriate machine learning algorithms for our problem, experiment with different models and techniques to find the best one. We tune hyperparameters for optimal performance.
+
+**Linear Regression**
+
+```{r}
+sapply(lapply(cleaned_df, unique), length)
+```
+
+```{r}
+summary(lm(finalWorth ~ ., data = cleaned_df))
+```
+
+```{r}
+summary(lm(finalWorth ~ gdp_country , data = tibble_df)) 
+```
+
+```{r}
+
+tibble_df <- 
+  tibble_df |> 
+  mutate(selfMade = ifelse(selfMade, 'yes', 'no')) |> 
+  mutate(selfMade = as_factor(selfMade)) 
+  
+# summary(lm(finalWorth ~ gdpCountry , data = tibble_df)) 
+
+
+# glimpse(tibble_df)
+# summary(lm(selfMade ~ ., data = tibble_df))
+```
+
+```{r LR_FullModel}
+
+lr_data <- 
+  tibble_df |> 
+  mutate(selfMade = as.factor(selfMade)) |> 
+  lm(finalWorth ~ .) 
+# lr_fullmodel <- lm(finalWorth ~ ., data = data)
+# summary(lr_fullmodel)
+```
 
 **Logistic Regression**
 
@@ -228,7 +316,7 @@ threshold[which.min(err.rate)]
 
 ```{r ModelSelection_KNNClassification}
 #removing the categorical predictors category and gender
-Classbill1 =Classbill[-c(4,6)]
+Classbill1 = Classbill[-c(4,6)]
 library(class)
 set.seed(123)
 training <- .70
