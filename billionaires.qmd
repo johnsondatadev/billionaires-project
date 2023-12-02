@@ -112,11 +112,15 @@ Data Description:
 Here, we explore and visualize the data to gain insights, identifying patterns, trends, and potential outliers. We assess the distribution of variables, consider the relationships between variables.
 
 ```{r}
+```
+
+```{r}
 library(tidyverse)
 library(tidymodels)
 library(recipeselectors)
 library(dplyr)
 library(ggplot2)
+library(skimr)
 ```
 
 ```{r}
@@ -128,6 +132,10 @@ glimpse(data)
 ```
 
 The data contains 2640 observations of 35 features
+
+```{r}
+skimr::skim(data)
+```
 
 ```{r}
 #I removed the columns with a lot of NAs and the ones which we wont use like latitude and longitude
@@ -360,6 +368,10 @@ Here, we train the selected model on the training data monitor the model perform
 
 ```{r ModelTraining}
 
+library(tidymodels)
+
+set.seed(123)
+df_split <- initial_split()
 ```
 
 ## 08. Model Evaluation
