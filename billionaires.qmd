@@ -190,6 +190,8 @@ Here, we create relevant features from the raw data. We perform feature selectio
 
 In this section, we choose the appropriate machine learning algorithms for our problem, experiment with different models and techniques to find the best one. We tune hyperparameters for optimal performance.
 
+**Logistic Regression**
+
 ```{r ModelSelection_LogisticClassification}
 #Classification LOGISTIC to predict whether the billonaire is self made or not
 set.seed(123)
@@ -221,6 +223,8 @@ table(Ttest$selfMade)
 min(err.rate)
 threshold[which.min(err.rate)]
 ```
+
+**KNN Classification**
 
 ```{r ModelSelection_KNNClassification}
 #removing the categorical predictors category and gender
