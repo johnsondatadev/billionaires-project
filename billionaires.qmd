@@ -122,7 +122,7 @@ library(glmnet)
 ```
 
 ```{r}
-data <- read_csv("data/Billionaires.csv", show_col_types = F)
+data <- read_csv("data/Billionaires.csv")
 # head(data)
 # dim(data)
 glimpse(data)
@@ -159,7 +159,7 @@ colSums(is.na(cleaned_data))
 
 Classbill <-
   cleaned_data |>
-relocate(selfMade,.before = rank)
+  relocate(selfMade,.before = rank)
 
 Classbill$gdp_country = as.numeric(gsub("[\\$,]", "", Classbill$gdp_country))
 ```
