@@ -129,14 +129,14 @@ glimpse(data)
 # colSums(is.na(data))
 ```
 
-The data contains 2640 observations of 35 features
-
 ```{r}
 #I removed the columns with a lot of NAs and the ones which we wont use like latitude and longitude
 dim(data)
 data <- mutate(data, age = na_if(age, -1))
 data <- data[-c(4,6:11,13,15:24,26,28,29,31,34,35)]
 ```
+
+The data contains 2640 observations of 35 features
 
 ```{r}
 
