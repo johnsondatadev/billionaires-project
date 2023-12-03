@@ -119,6 +119,7 @@ library(dplyr)
 library(ggplot2)
 library(leaps)
 library(glmnet)
+library(corrplot)
 ```
 
 ```{r}
@@ -140,6 +141,15 @@ data <- data[-c(4,6:11,13,15:24,26,28,29,31,34,35)]
 
 ```{r}
 
+View(data)
+
+# corrplot(cor(data, use = "pairwise.complete.obs"))
+
+numeric_data <- select_if(data, is.numeric) 
+
+View(numeric_data)
+# cor_bill <- cor(numeric_data)
+# corrplot(cor_bill)
 ```
 
 ```{r EDA}
@@ -163,6 +173,19 @@ Classbill <-
 
 Classbill$gdp_country = as.numeric(gsub("[\\$,]", "", Classbill$gdp_country))
 ```
+
+```{r}
+numeric_data <- select_if(Classbill, is.numeric) 
+cor_bill <- cor(numeric_data)
+corrplot(cor_bill, method = 'number')
+# corrplot(cor_bill, type = "upper", order = 'hclust', addCoef.col = 'black', tl.pos = 'd',
+#          cl.pos = 'n', col = COL2('PiYG'))
+# test_cor = cor.mtest(numeric_data, conf.level = 0.95)
+# corrplot(cor_bill, p.mat = test_cor$p, insig = 'p-value')
+# corrplot.mixed(cor_bill, order = "AOE")
+```
+
+While it logically appears as though rank should be highly correlated with `finalWorth`, the plot indicates that it has a weak negative correlation with it. However, there is a high negative correlation between `life_expectancy_country` and `cpi_country`. Similarly, there is a fair positive correlation between `population_country` and `total_tax_rate_country`.
 
 ## 05. Feature Engineering
 
