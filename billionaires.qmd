@@ -119,10 +119,11 @@ library(dplyr)
 library(ggplot2)
 library(leaps)
 library(glmnet)
+library(corrplot)
 ```
 
 ```{r}
-data <- read_csv("data/Billionaires.csv", show_col_types = F)
+data <- read_csv("data/Billionaires.csv")
 # head(data)
 # dim(data)
 glimpse(data)
@@ -140,6 +141,15 @@ The data contains 2640 observations of 35 features
 
 ```{r}
 
+View(data)
+
+# corrplot(cor(data, use = "pairwise.complete.obs"))
+
+numeric_data <- select_if(data, is.numeric) 
+
+View(numeric_data)
+# cor_bill <- cor(numeric_data)
+# corrplot(cor_bill)
 ```
 
 ```{r EDA}
@@ -175,18 +185,132 @@ colSums(is.na(cleaned_data))
 
 Classbill <-
   cleaned_data |>
-relocate(selfMade,.before = rank)
+  relocate(selfMade,.before = rank)
 
 Classbill$gdp_country = as.numeric(gsub("[\\$,]", "", Classbill$gdp_country))
 ```
+
+```{r}
+numeric_data <- select_if(Classbill, is.numeric) 
+cor_bill <- cor(numeric_data)
+# corrplot(cor_bill, method = 'number')
+corrplot(cor_bill, method = 'shade', order = 'AOE', diag = F)
+# corrplot(cor_bill, method = 'shade', order = 'AOE', addCoef.col = 'black', tl.pos = 'd',cl.pos = 'n', col = COL2('BrBG'), diag = FALSE)
+# corrplot(cor_bill, type = "upper", order = 'hclust', addCoef.col = 'black', tl.pos = 'd',
+#          cl.pos = 'n', col = COL2('PiYG'))
+# test_cor = cor.mtest(numeric_data, conf.level = 0.95)
+# corrplot(cor_bill, p.mat = test_cor$p, insig = 'p-value')
+# corrplot.mixed(cor_bill, order = "AOE")
+```
+
+While it logically appears as though rank should be highly correlated with `finalWorth`, the plot indicates that it has a weak negative correlation with it. However, there is a high negative correlation between `life_expectancy_country` and `cpi_country`. Similarly, there is a fair positive correlation between `population_country` and `total_tax_rate_country`.
 
 ## 05. Feature Engineering
 
 Here, we create relevant features from the raw data. We perform feature selection to identify the most important features, applying domain knowledge to transform data effectively.
 
 ```{r FeatureEngineering}
+# Correlation Analysis
+missing_values <- colSums(is.na(data))
+
+print(missing_values)
+
+complete_data <- Classbill[complete.cases(Classbill), ]
+
+numeric_data <- complete_data[sapply(complete_data, is.numeric)]
+
+correlation_results <- cor(numeric_data[, -which(names(numeric_data) == "finalWorth")], numeric_data$finalWorth)
+
+# Print the correlation results
+print(correlation_results)
+```
+
+Rank is correlated with finalWorth. We remove that and plot the correlation to inspect for multicollinearity.
+
+```{r}
+clean_numeric_data <- numeric_data[, -1]
+correlation_matrix <- cor(numeric_data[, -which(names(numeric_data) == "finalWorth")])
+print(correlation_matrix)
+```
+
+```{r VIF-Multicollinearity}
+# install.packages("car")
+library(car)
+
+vif_values <- vif(lm(finalWorth ~ ., data = numeric_data))
+print(vif_values)
+```
+
+```{r Correlation-Heatmap}
+# install.packages("heatmaply")
+library(heatmaply)
+
+# Compute correlation matrix
+correlation_matrix <- cor(clean_numeric_data[, -which(names(clean_numeric_data) == "finalWorth")])
+
+# Create interactive heatmap
+heatmaply(correlation_matrix, symmetric = TRUE)
 
 ```
+
+`cpi_country` and `life_expectancy_country` are highly correlated.
+
+### Random Forest Feature Selection
+
+```{r FeatureSelection-RandomForest}
+# install.packages("randomForest")
+library(randomForest)
+
+set.seed(123) 
+
+rf_model <- randomForest(finalWorth ~ ., data = complete_data)
+
+# Get feature importance
+importance <- importance(rf_model)
+
+# Sort features by importance
+sorted_importance <- importance[order(importance, decreasing = TRUE), ]
+
+# Print or inspect the sorted feature importance
+print(sorted_importance)
+```
+
+Important features based on random forest selection are `rank, age, category, total_tax_rate_country, cpi_country, gdp_country, life_expectancy_country, selfMade, population_country, gender`
+
+```{r FeatureSelection-LASSO}
+library(glmnet)
+
+# non_numeric_cols <- sapply(Classbill, is.character)
+# 
+# # If non-numeric columns are present, encode them (example using dummy encoding)
+# if (sum(non_numeric_cols) > 0) {
+#   new_data <- model.matrix(~ . - 1, data = Classbill)  # Remove intercept
+# }
+# 
+# # Remove missing values if any
+# new_data <- na.omit(new_data)
+# 
+# clean_complete_data <- cleaned_data[complete.cases(new_data), ]
+# Extract predictors and target variable
+X <- as.matrix(clean_numeric_data[, -which(names(clean_numeric_data) == "finalWorth")])
+y <- clean_numeric_data$finalWorth
+
+# Fit Lasso regression model using glmnet
+lasso_model <- cv.glmnet(X, y, alpha = 1)  # alpha = 1 for Lasso
+
+# Plot the cross-validated mean squared error vs. lambda
+plot(lasso_model)
+
+# Select the best lambda value
+best_lambda <- lasso_model$lambda.min
+cat("Best lambda value:", best_lambda, "\n")
+
+# Get coefficients for the selected lambda
+lasso_coef <- coef(lasso_model, s = best_lambda)
+print(lasso_coef)
+```
+
+Based on LASSO, `age, cpi_country, life_expectancy_country, total_tax_rate_country, and population_country` are important predictors.
 
 ## 06. Model Selection
 
@@ -379,8 +503,72 @@ lasso_min$df
 
 Here, we train the selected model on the training data monitor the model performance on the validation set.
 
-```{r ModelTraining}
+```{r ModelTraining-StratifiedSampling}
 
+library(tidymodels)
+
+cleaned_df <- 
+  Classbill |> 
+  mutate(selfMade = ifelse(selfMade, 'yes', 'no')) |> 
+  mutate(selfMade = as.factor(selfMade))
+
+# The class is imbalanced, hence, the need to do a stratified sampling on the training and test sets.
+cleaned_df |> 
+  count(selfMade) |> 
+  mutate(percent = n / sum(n))
+
+set.seed(1234)
+
+df_split <- initial_split(cleaned_df, strata = selfMade)
+df_train <- training(df_split)
+df_test <- testing(df_split)
+dim(df_train)
+dim(df_test)
+```
+
+```{r ModelTraining-LR-tidymodel}
+rf_df <- 
+  cleaned_df |> 
+  select(-category)
+
+non_numeric_cols <- sapply(rf_df, function(x) !is.numeric(x))
+
+# Convert non-numeric columns to factors (example)
+rf_df[, non_numeric_cols] <- lapply(rf_df[, non_numeric_cols], as.factor)
+
+# Create a recipe for pre-processing
+data_recipe <- recipe(finalWorth ~ ., data = rf_df) %>%
+  step_integer(all_nominal(), -all_outcomes()) %>%  # Convert nominal variables to integers
+  step_dummy(all_nominal(), -all_outcomes()) %>%   # Dummy encode nominal variables
+  step_normalize(all_predictors())
+
+# data_recipe <- recipe(finalWorth ~ ., data = rf_df) |> 
+#   step_normalize(all_predictors())
+
+df_split <- initial_split(rf_df, prop = 0.8, strata = selfMade)
+data_train <- training(df_split)
+data_test <- testing(df_split)
+
+# lm_fit <- lm(finalWorth ~ ., data = data_train)
+
+# summary(lm_fit)
+lm_spec <- linear_reg() |>
+  set_engine("lm")
+
+# Create a workflow
+lm_workflow <- workflow() |>
+  add_recipe(data_recipe) |>
+  add_model(lm_spec)
+
+# Train the model using stratified sampling
+lm_fit <- fit(lm_workflow, data = data_train)
+
+# Make predictions on the test set
+predictions <- predict(lm_fit, data_test)
+
+# Evaluate the model
+evaluation_metrics <- metrics(data = predictions, truth = data_test$finalWorth, estimate = .pred)
+print(evaluation_metrics)
 ```
 
 ## 08. Model Evaluation
