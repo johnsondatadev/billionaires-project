@@ -177,7 +177,9 @@ Classbill$gdp_country = as.numeric(gsub("[\\$,]", "", Classbill$gdp_country))
 ```{r}
 numeric_data <- select_if(Classbill, is.numeric) 
 cor_bill <- cor(numeric_data)
-corrplot(cor_bill, method = 'number')
+# corrplot(cor_bill, method = 'number')
+corrplot(cor_bill, method = 'shade', order = 'AOE', diag = F)
+# corrplot(cor_bill, method = 'shade', order = 'AOE', addCoef.col = 'black', tl.pos = 'd',cl.pos = 'n', col = COL2('BrBG'), diag = FALSE)
 # corrplot(cor_bill, type = "upper", order = 'hclust', addCoef.col = 'black', tl.pos = 'd',
 #          cl.pos = 'n', col = COL2('PiYG'))
 # test_cor = cor.mtest(numeric_data, conf.level = 0.95)
@@ -386,8 +388,27 @@ lasso_min$df
 
 Here, we train the selected model on the training data monitor the model performance on the validation set.
 
-```{r ModelTraining}
+```{r ModelTraining-StratifiedSampling}
 
+library(tidymodels)
+
+cleaned_df <- 
+  Classbill |> 
+  mutate(selfMade = ifelse(selfMade, 'yes', 'no')) |> 
+  mutate(selfMade = as.factor(selfMade))
+
+# The class is imbalanced, hence, the need to do a stratified sampling on the training and test sets.
+cleaned_df |> 
+  count(selfMade) |> 
+  mutate(percent = n / sum(n))
+
+set.seed(1234)
+
+df_split <- initial_split(cleaned_df, strata = selfMade)
+df_train <- training(df_split)
+df_test <- testing(df_split)
+dim(df_train)
+dim(df_test)
 ```
 
 ## 08. Model Evaluation
