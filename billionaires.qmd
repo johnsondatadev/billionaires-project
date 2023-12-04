@@ -41,7 +41,7 @@ Data Description:
 
 -   **finalWorth**: The final net worth of the billionaire in U.S. dollars.
 
--   **category**: The category or industry in which the billionaire's business operates.
+-   **category**: The category or industry in which the billionaire's business operates.Instal
 
 -   **personName**: The full name of the billionaire.
 
@@ -386,6 +386,36 @@ table(Ytesting,D)
 ```{r}
 cr = (table(Ytesting, D)[1, 1] + table(Ytesting, D)[2, 2])/(0.3*nrow(Classbill1))
 paste("The classification rate is", cr)
+```
+
+
+```{r}
+library(tree)
+Classbill1 =Classbill[-c(4,6)]
+Classbill1$selfMade <- as.factor(Classbill1$selfMade)
+set.seed(123)
+training <- .70
+s<- sample(nrow(Classbill1), floor(training*nrow(Classbill1)))
+trainingdat <- Classbill1[s,]
+testingdat <- Classbill1[-s,]
+tree <- tree(selfMade ~. , data = trainingdat)
+summary(tree)
+plot(tree)
+text(tree)
+yhat = predict(tree, newdata = testingdat, type = "class")
+table(yhat, testingdat$selfMade)
+cv <- cv.tree(tree, FUN = prune.misclass)
+cv
+plot(cv)
+trp <- prune.misclass(tree, best = 3)
+summary(trp)
+plot(trp)
+text(trp)
+```
+
+```{r}
+summary(tree)$misclass[1]/summary(tree)$misclass[2] # Original
+summary(trp)$misclass[1]/summary(trp)$misclass[2] # Pruned
 ```
 
 ```{r ModelSelection_linear}
