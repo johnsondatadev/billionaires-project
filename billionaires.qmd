@@ -537,10 +537,12 @@ train_pcr_fit <- pcr(finalWorth ~ ., data = lm_train, scale = TRUE, validation =
 summary(train_pcr_fit)
 ```
 
+Lowest adjusted CV at 21 components for 9905 MSREP.
+
 ```{r PCRTraining}
 set.seed(123)
 
-pcr_fitM <- pcr(finalWorth ~ ., data = lm_train, scale = TRUE, ncomp = 26)
+pcr_fitM <- pcr(finalWorth ~ ., data = lm_train, scale = TRUE, ncomp = 21)
 ```
 
 ```{r PLSTraining-Setup}
@@ -550,12 +552,12 @@ pls_fit <- plsr(finalWorth ~ ., data = lm_train, scale = TRUE, validation = "CV"
 summary(pls_fit)
 ```
 
-Reaches highest R2 at 10 and plateaus.
+Lowest adjusted CV at 3 components for 9916.
 
 ```{r PLSTraining}
 set.seed(123)
 
-pls_fitM <- plsr(finalWorth ~ ., data = lm_train, scale = TRUE, ncomp = 10)
+pls_fitM <- plsr(finalWorth ~ ., data = lm_train, scale = TRUE, ncomp = 3)
 ```
 
 ## 08. Model Evaluation
@@ -597,7 +599,7 @@ trained_ridge_1se$df
 ```
 
 ```{r PCREvaluation}
-yHat_pcr <- predict(pcr_fitM, newdata = lm_test, ncomp = 26)
+yHat_pcr <- predict(pcr_fitM, newdata = lm_test, ncomp = 21)
 
 mean((yHat_pcr - lm_test$finalWorth)^2)
 
@@ -605,7 +607,7 @@ validationplot(train_pcr_fit)
 ```
 
 ```{r PLSEvaluation}
-yHat_pls <- predict(pls_fitM, newdata = lm_test, ncomp = 10)
+yHat_pls <- predict(pls_fitM, newdata = lm_test, ncomp = 3)
 mean((yHat_pls - lm_test$finalWorth)^2)
 
 validationplot(pls_fit)
