@@ -194,7 +194,35 @@ While it logically appears as though rank should be highly correlated with `fina
 Here, we create relevant features from the raw data. We perform feature selection to identify the most important features, applying domain knowledge to transform data effectively.
 
 ```{r FeatureEngineering}
+# Correlation Analysis
+missing_values <- colSums(is.na(data))
 
+print(missing_values)
+
+complete_data <- data[complete.cases(data), ]
+
+numeric_data <- complete_data[sapply(complete_data, is.numeric)]
+
+correlation_results <- cor(numeric_data[, -which(names(numeric_data) == "finalWorth")], numeric_data$finalWorth)
+
+# Print the correlation results
+print(correlation_results)
+```
+
+Rank is correlated with finalWorth. We remove that and plot the correlation to inspect for multicollinearity.
+
+```{r}
+clean_numeric_data <- numeric_data[, -1]
+correlation_matrix <- cor(numeric_data[, -which(names(numeric_data) == "finalWorth")])
+plot(correlation_matrix)
+```
+
+```{r VIF-Multicollinearity}
+# install.packages("car")
+library(car)
+
+vif_values <- vif(lm(finalWorth ~ ., data = numeric_data))
+print(vif_values)
 ```
 
 ## 06. Model Selection
