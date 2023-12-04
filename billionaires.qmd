@@ -510,6 +510,51 @@ dim(df_train)
 dim(df_test)
 ```
 
+```{r ModelTraining-LR-tidymodel}
+rf_df <- 
+  cleaned_df |> 
+  select(-category)
+
+non_numeric_cols <- sapply(rf_df, function(x) !is.numeric(x))
+
+# Convert non-numeric columns to factors (example)
+rf_df[, non_numeric_cols] <- lapply(rf_df[, non_numeric_cols], as.factor)
+
+# Create a recipe for pre-processing
+data_recipe <- recipe(finalWorth ~ ., data = rf_df) %>%
+  step_integer(all_nominal(), -all_outcomes()) %>%  # Convert nominal variables to integers
+  step_dummy(all_nominal(), -all_outcomes()) %>%   # Dummy encode nominal variables
+  step_normalize(all_predictors())
+
+# data_recipe <- recipe(finalWorth ~ ., data = rf_df) |> 
+#   step_normalize(all_predictors())
+
+df_split <- initial_split(rf_df, prop = 0.8, strata = selfMade)
+data_train <- training(df_split)
+data_test <- testing(df_split)
+
+# lm_fit <- lm(finalWorth ~ ., data = data_train)
+
+# summary(lm_fit)
+lm_spec <- linear_reg() |>
+  set_engine("lm")
+
+# Create a workflow
+lm_workflow <- workflow() |>
+  add_recipe(data_recipe) |>
+  add_model(lm_spec)
+
+# Train the model using stratified sampling
+lm_fit <- fit(lm_workflow, data = data_train)
+
+# Make predictions on the test set
+predictions <- predict(lm_fit, data_test)
+
+# Evaluate the model
+evaluation_metrics <- metrics(data = predictions, truth = data_test$finalWorth, estimate = .pred)
+print(evaluation_metrics)
+```
+
 ## 08. Model Evaluation
 
 Here, we evaluate the model's performance using appropriate metrics (e.g., accuracy, RMSE). Compare the model's performance to baselines and expectations.
