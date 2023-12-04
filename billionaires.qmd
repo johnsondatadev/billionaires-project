@@ -111,7 +111,7 @@ Data Description:
 
 Here, we explore and visualize the data to gain insights, identifying patterns, trends, and potential outliers. We assess the distribution of variables, consider the relationships between variables.
 
-```{r}
+```{r, message=FALSE}
 library(tidyverse)
 library(tidymodels)
 # library(recipeselectors)
@@ -120,9 +120,10 @@ library(ggplot2)
 library(leaps)
 library(glmnet)
 library(corrplot)
+library(pls)
 ```
 
-```{r}
+```{r, message=FALSE}
 data <- read_csv("data/Billionaires.csv")
 # head(data)
 # dim(data)
@@ -296,6 +297,34 @@ print(lasso_coef)
 
 Based on LASSO, `age, cpi_country, life_expectancy_country, total_tax_rate_country, and population_country` are important predictors.
 
+```{r FeatureSelection-Linear-R2CPBIC}
+set.seed(123)
+training <- .70
+
+z <- sample(nrow(complete_data), floor(training*nrow(complete_data)))
+lm_train <- complete_data[z,] 
+lm_test <- complete_data[-z,] 
+
+full_base_model <- lm(finalWorth ~ ., data = lm_train)
+summary(full_base_model)
+
+# Set up for obtaining results
+reg.fit <- regsubsets(finalWorth ~ ., data = lm_train, nvmax = 10)
+sum_reg <- summary(reg.fit)
+
+# R2
+sum_reg$adjr2
+which.max(sum_reg$adjr2)
+
+#BIC
+which.min(sum_reg$bic)
+sum_reg$which[which.min(sum_reg$bic),]
+
+# CP
+which.min(abs(sum_reg$cp - 0:10))
+sum_reg$which[which.min(abs(sum_reg$cp - 0:10)),]
+```
+
 ## 06. Model Selection
 
 In this section, we choose the appropriate machine learning algorithms for our problem, experiment with different models and techniques to find the best one. We tune hyperparameters for optimal performance.
@@ -372,115 +401,61 @@ cr = (table(Ytesting, D)[1, 1] + table(Ytesting, D)[2, 2])/(0.3*nrow(Classbill1)
 paste("The classification rate is", cr)
 ```
 
-```{r ModelSelection_linear}
-# Using regression to predict final worth, therefore necessary to remove rank as it is directly correlated to final worth
-set.seed(123)
-training <- .70
-
-minus_rank <- Classbill |>
-  select(-rank)
-
-z <- sample(nrow(minus_rank), floor(training*nrow(minus_rank)))
-lm_train <- minus_rank[z,] 
-lm_test <- minus_rank[-z,] 
-
-full_base_model <- lm(finalWorth ~ ., data = lm_train)
-summary(full_base_model)
-```
-
-```{r ModelSelection_R2BICCPSetup}
-# Set up for obtaining results
-reg.fit <- regsubsets(finalWorth ~ ., data = lm_train, nvmax = 10)
-sum_reg <- summary(reg.fit)
-```
-
-```{r r2}
-# R2
-sum_reg$adjr2
-which.max(sum_reg$adjr2)
-```
-
-```{r BIC}
-#BIC
-which.min(sum_reg$bic)
-sum_reg$which[which.min(sum_reg$bic),]
-```
-
-```{r CP}
-# Cp
-which.min(abs(sum_reg$cp - 0:10))
-sum_reg$which[which.min(abs(sum_reg$cp - 0:10)),]
-```
-
 ```{r ModelSelection_Stepwise}
 null_model <- lm(finalWorth ~ 1, data = lm_train)
 reg_step <- step(full_base_model, scope = list(lower = null_model, upper = full_base_model), method = "backward") # For some reason not running? 
 ```
 
 ```{r Lasso_Ridge_Setup}
-# Creating validation set and design matrices for train and test
+# Further setting up training and testing data
 set.seed(123)
 
 x_train <- model.matrix(full_base_model)[,-1]
 y_train <- lm_train$finalWorth
 
-reg_test <- lm(finalWorth ~ ., data = minus_rank) 
+reg_test <- lm(finalWorth ~ ., data = lm_test) 
 x_test <- model.matrix(reg_test)[,-1]
 y_test <- lm_test$finalWorth
 ```
 
-```{r Ridge}
+```{r Lasso Training-1se}
+# Fit Lasso regression model using glmnet
+trained_lasso_model <- cv.glmnet(x_train, y_train, alpha = 1)  # alpha = 1 for Lasso
+
+# Plot the cross-validated mean squared error vs. lambda.min
+plot(trained_lasso_model)
+
+# Lasso 1se
+trained_lasso_1se <- glmnet(x_train, y_train, lambda = trained_lasso_model$lambda.1se)
+coef(trained_lasso_1se)
+
+# Plot the cross-validated mean squared error vs. lambda 1se
+plot(trained_lasso_1se)
+```
+
+```{r LassoTraining-LambdaMin}
+#Lasso Min
+trained_lasso_min <- glmnet(x_train, y_train, lambda = trained_lasso_model$lambda.min)
+coef(trained_lasso_min)
+```
+
+Lambda 1se eliminates all variables, therefore best to use the lambda min.
+
+```{r RidgeTraining}
 # Using cross validation results to select lambda
 set.seed(123)
-r_train_cv <- cv.glmnet(x_train, y_train, alpha = 0 )
-r_train_cv
-```
+trained_ridge <- cv.glmnet(x_train, y_train, alpha = 0 )
+trained_ridge
+# Ridge plot
+plot(trained_ridge)
 
-```{r RidgePlot}
-plot(r_train_cv)
-```
+# Lambda Min Ridge
+trained_ridge_min <- glmnet(x_train, y_train, alpha = 0, lambda = trained_ridge$lambda.min)
+coef(trained_ridge_min)
 
-```{r RidgeCont}
-ridge_min <- glmnet(x_train, y_train, alpha = 0, lambda = r_train_cv$lambda.min)
-yHat <- predict(ridge_min, newx = x_test, s = "lambda.min")
-pmse_r <-  mean((yHat - y_test)^2)
-pmse_r
-ridge_min$df
-```
-
-```{r Lasso}
-set.seed(123)
-l_train_cv <- cv.glmnet(x_train, y_train) # default alpha=1
-l_train_cv
-```
-
-```{r LassoPlot}
-plot(l_train_cv)
-```
-
-```{r LassoCont}
-lasso_1se <- glmnet(x_train, y_train, lambda = l_train_cv$lambda.1se)
-coef(lasso_1se)
-```
-
-```{r LassoCalculations}
-Hat <- predict(lasso_1se, newx = x_test, s = "lambda.1se")
-pmse_l1se <- mean((yHat - y_test)^2)
-pmse_l1se
-
-lasso_1se$df
-```
-
-```{r LassoMin}
-lasso_min <- glmnet(x_train, y_train, lambda = l_train_cv$lambda.min)
-
-coef(lasso_min)
-
-yHat <- predict(lasso_min, newx = x_test, s = "lambda.min")
-pmse_lmin <- mean((yHat - y_test)^2)
-pmse_lmin
-
-lasso_min$df
+# Lambda Min Ridge
+trained_ridge_1se <- glmnet(x_train, y_train, alpha = 0, lambda = trained_ridge$lambda.1se)
+coef(trained_ridge_1se)
 ```
 
 ## 07. Model Training
@@ -555,6 +530,34 @@ evaluation_metrics <- metrics(data = predictions, truth = data_test$finalWorth, 
 print(evaluation_metrics)
 ```
 
+```{r PCRTraining-Setup}
+set.seed(123)
+
+train_pcr_fit <- pcr(finalWorth ~ ., data = lm_train, scale = TRUE, validation = "CV")
+summary(train_pcr_fit)
+```
+
+```{r PCRTraining}
+set.seed(123)
+
+pcr_fitM <- pcr(finalWorth ~ ., data = lm_train, scale = TRUE, ncomp = 26)
+```
+
+```{r PLSTraining-Setup}
+set.seed(123)
+
+pls_fit <- plsr(finalWorth ~ ., data = lm_train, scale = TRUE, validation = "CV")
+summary(pls_fit)
+```
+
+Reaches highest R2 at 10 and plateaus.
+
+```{r PLSTraining}
+set.seed(123)
+
+pls_fitM <- plsr(finalWorth ~ ., data = lm_train, scale = TRUE, ncomp = 10)
+```
+
 ## 08. Model Evaluation
 
 Here, we evaluate the model's performance using appropriate metrics (e.g., accuracy, RMSE). Compare the model's performance to baselines and expectations.
@@ -565,6 +568,47 @@ Here, we evaluate the model's performance using appropriate metrics (e.g., accur
 
 ```{r ModelEvaluation_KNNClassification}
 
+```
+
+```{r LassoEvaluation}
+yHat <- predict(trained_lasso_1se, newx = x_test, s = "lambda.1se")
+pmse_l1se <- mean((yHat - y_test)^2)
+pmse_l1se
+
+trained_lasso_1se$df
+
+yHat <- predict(trained_lasso_min, newx = x_test, s = "lambda.min")
+pmse_lmin <- mean((yHat - y_test)^2)
+pmse_lmin
+
+trained_lasso_min$df
+```
+
+```{r RidgeEvaluation}
+yHat <- predict(trained_ridge_min, newx = x_test, s = "lambda.min")
+pmse_r <-  mean((yHat - y_test)^2)
+pmse_r
+trained_ridge_min$df
+
+yHat <- predict(trained_ridge_1se, newx = x_test, s = "lambda.1se")
+pmse_r <-  mean((yHat - y_test)^2)
+pmse_r
+trained_ridge_1se$df
+```
+
+```{r PCREvaluation}
+yHat_pcr <- predict(pcr_fitM, newdata = lm_test, ncomp = 26)
+
+mean((yHat_pcr - lm_test$finalWorth)^2)
+
+validationplot(train_pcr_fit)
+```
+
+```{r PLSEvaluation}
+yHat_pls <- predict(pls_fitM, newdata = lm_test, ncomp = 10)
+mean((yHat_pls - lm_test$finalWorth)^2)
+
+validationplot(pls_fit)
 ```
 
 ## 09. Model Validation
