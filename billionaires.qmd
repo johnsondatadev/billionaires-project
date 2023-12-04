@@ -199,7 +199,7 @@ missing_values <- colSums(is.na(data))
 
 print(missing_values)
 
-complete_data <- data[complete.cases(data), ]
+complete_data <- Classbill[complete.cases(Classbill), ]
 
 numeric_data <- complete_data[sapply(complete_data, is.numeric)]
 
@@ -214,7 +214,7 @@ Rank is correlated with finalWorth. We remove that and plot the correlation to i
 ```{r}
 clean_numeric_data <- numeric_data[, -1]
 correlation_matrix <- cor(numeric_data[, -which(names(numeric_data) == "finalWorth")])
-plot(correlation_matrix)
+print(correlation_matrix)
 ```
 
 ```{r VIF-Multicollinearity}
@@ -224,6 +224,77 @@ library(car)
 vif_values <- vif(lm(finalWorth ~ ., data = numeric_data))
 print(vif_values)
 ```
+
+```{r Correlation-Heatmap}
+# install.packages("heatmaply")
+library(heatmaply)
+
+# Compute correlation matrix
+correlation_matrix <- cor(clean_numeric_data[, -which(names(clean_numeric_data) == "finalWorth")])
+
+# Create interactive heatmap
+heatmaply(correlation_matrix, symmetric = TRUE)
+
+```
+
+`cpi_country` and `life_expectancy_country` are highly correlated.
+
+### Random Forest Feature Selection
+
+```{r FeatureSelection-RandomForest}
+# install.packages("randomForest")
+library(randomForest)
+
+set.seed(123) 
+
+rf_model <- randomForest(finalWorth ~ ., data = complete_data)
+
+# Get feature importance
+importance <- importance(rf_model)
+
+# Sort features by importance
+sorted_importance <- importance[order(importance, decreasing = TRUE), ]
+
+# Print or inspect the sorted feature importance
+print(sorted_importance)
+```
+
+Important features based on random forest selection are `rank, age, category, total_tax_rate_country, cpi_country, gdp_country, life_expectancy_country, selfMade, population_country, gender`
+
+```{r FeatureSelection-LASSO}
+library(glmnet)
+
+# non_numeric_cols <- sapply(Classbill, is.character)
+# 
+# # If non-numeric columns are present, encode them (example using dummy encoding)
+# if (sum(non_numeric_cols) > 0) {
+#   new_data <- model.matrix(~ . - 1, data = Classbill)  # Remove intercept
+# }
+# 
+# # Remove missing values if any
+# new_data <- na.omit(new_data)
+# 
+# clean_complete_data <- cleaned_data[complete.cases(new_data), ]
+# Extract predictors and target variable
+X <- as.matrix(clean_numeric_data[, -which(names(clean_numeric_data) == "finalWorth")])
+y <- clean_numeric_data$finalWorth
+
+# Fit Lasso regression model using glmnet
+lasso_model <- cv.glmnet(X, y, alpha = 1)  # alpha = 1 for Lasso
+
+# Plot the cross-validated mean squared error vs. lambda
+plot(lasso_model)
+
+# Select the best lambda value
+best_lambda <- lasso_model$lambda.min
+cat("Best lambda value:", best_lambda, "\n")
+
+# Get coefficients for the selected lambda
+lasso_coef <- coef(lasso_model, s = best_lambda)
+print(lasso_coef)
+```
+
+Based on LASSO, `age, cpi_country, life_expectancy_country, total_tax_rate_country, and population_country` are important predictors.
 
 ## 06. Model Selection
 
