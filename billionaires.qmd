@@ -124,6 +124,8 @@ library(corrplot)
 
 ```{r}
 data <- read_csv("data/Billionaires.csv")
+nrow(data)
+ncol(data)is.na
 # head(data)
 # dim(data)
 glimpse(data)
@@ -165,7 +167,7 @@ data |>
   geom_density(alpha = 0.8) +
   scale_x_log10()
 
-data |> 
+data |>
   ggplot(aes(x = industries, finalWorth)) +
   geom_histogram(aes(fill = selfMade), stat = "identity") +
   coord_flip() +
@@ -346,6 +348,9 @@ FPR[[i]] <- sum(Yhat == "TRUE" & Ttest$selfMade == "FALSE")/
 table(Ttest$selfMade)
 min(err.rate)
 threshold[which.min(err.rate)]
+
+logErrorRate <- min(err.rate)
+summary(a)
 ```
 
 ```{r ModelSelection_KNNClassification}
@@ -374,6 +379,7 @@ for (k in 1:50){
 
 paste("The k which minimizes the prediction error rate is",which.min(z))
 paste("The associated error rate is", z[which.min(z)])
+KNNErrorRate <- z[which.min(z)]
 ```
 
 ```{r}
@@ -389,7 +395,7 @@ paste("The classification rate is", cr)
 ```
 
 
-```{r}
+```{r Classification tree}
 library(tree)
 Classbill1 =Classbill[-c(4,6)]
 Classbill1$selfMade <- as.factor(Classbill1$selfMade)
@@ -414,8 +420,51 @@ text(trp)
 ```
 
 ```{r}
+#training error rate
 summary(tree)$misclass[1]/summary(tree)$misclass[2] # Original
 summary(trp)$misclass[1]/summary(trp)$misclass[2] # Pruned
+
+```
+
+```{r}
+#prediction error rate 
+set.seed(123)
+yhat = predict(tree, newdata = testingdat, type = "class")
+mean(yhat != testingdat$selfMade )
+yhat = predict(trp, newdata = testingdat, type = "class")
+mean(yhat != testingdat$selfMade )
+TreeErrorRate <- mean(yhat != testingdat$selfMade )
+```
+
+```{r}
+#Visual for Presentation
+resultsClassification <- data.frame(Approach = c("Logistic Regression", "KNN", "Classification Tree"), ClassificationRate = c((1-logErrorRate), (1-KNNErrorRate), (1-TreeErrorRate)))
+ggplot(data = resultsClassification) +
+  geom_bar(mapping = aes(x = Approach, y = ClassificationRate, fill = Approach), stat = "identity")
+```
+
+```{r Classification tree}
+library(tree)
+Classbill1 =Classbill[-c(4,6)]
+test1$selfMade <- as.factor(test1$selfMade)
+set.seed(123)
+training <- .70
+s<- sample(nrow(test1), floor(training*nrow(test1)))
+trainingdat <- test1[s,]
+testingdat <- test1[-s,]
+tree <- tree(selfMade ~. , data = trainingdat)
+summary(tree)
+plot(tree)
+text(tree)
+yhat = predict(tree, newdata = testingdat, type = "class")
+table(yhat, testingdat$selfMade)
+cv <- cv.tree(tree, FUN = prune.misclass)
+cv
+plot(cv)
+trp <- prune.misclass(tree, best = 5)
+summary(trp)
+plot(trp)
+text(trp)
 ```
 
 ```{r ModelSelection_linear}
