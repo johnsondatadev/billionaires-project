@@ -41,7 +41,7 @@ Data Description:
 
 -   **finalWorth**: The final net worth of the billionaire in U.S. dollars.
 
--   **category**: The category or industry in which the billionaire's business operates.
+-   **category**: The category or industry in which the billionaire's business operates.Instal
 
 -   **personName**: The full name of the billionaire.
 
@@ -112,52 +112,34 @@ Data Description:
 Here, we explore and visualize the data to gain insights, identifying patterns, trends, and potential outliers. We assess the distribution of variables, consider the relationships between variables.
 
 ```{r}
-```
-
-```{r}
 library(tidyverse)
 library(tidymodels)
-library(recipeselectors)
+# library(recipeselectors)
 library(dplyr)
 library(ggplot2)
-library(skimr)
+library(leaps)
+library(glmnet)
+library(corrplot)
 ```
 
 ```{r}
-data <- read_csv("data/Billionaires.csv", show_col_types = F)
+data <- read_csv("data/Billionaires.csv")
+nrow(data)
+ncol(data)
+# is.na
 # head(data)
 # dim(data)
 glimpse(data)
 # colSums(is.na(data))
 ```
 
-The data contains 2640 observations of 35 features
-
-```{r}
-skimr::skim(data)
-```
-
-```{r}
-#I removed the columns with a lot of NAs and the ones which we wont use like latitude and longitude
-dim(data)
-data <- mutate(data, age = na_if(age, -1))
-data <- data[-c(4,6:11,13,15:24,26,28,29,31,34,35)]
-```
-
-```{r}
-tibble_df_cleaned <- 
-  tibble_df |> 
-  mutate(gdp_country = gsub("[$ ,]", "", gdp_country)) |> 
-  mutate(gdp_country = as.numeric(gdp_country))
-
-head(tibble_df_cleaned)
-# |> 
-#   head()
-#   mutate(gdp_country = )
-```
-
 ```{r EDA}
 # Comparing male and female final worth
+data <- 
+  data |> 
+  mutate(selfMade = ifelse(selfMade, 'yes', 'no')) |> 
+  mutate(selfMade = as.factor(selfMade))
+  
 data |> 
   ggplot(aes(finalWorth, fill = gender)) + 
   geom_density(alpha = 0.8) +
@@ -169,26 +151,38 @@ data |>
   geom_density(alpha = 0.8) +
   scale_x_log10()
 
-data |> 
+data |>
   ggplot(aes(x = industries, finalWorth)) +
   geom_histogram(aes(fill = selfMade), stat = "identity") +
   coord_flip() +
   facet_wrap(~ gender)
 ```
 
+```{r}
+#I removed the columns with a lot of NAs and the ones which we wont use like latitude and longitude
+dim(data)
+data <- mutate(data, age = na_if(age, -1))
+data <- data[-c(4,6:11,13,15:24,26,28,29,31,34,35)]
+```
+
+The data contains 2640 observations of 35 features
+
+```{r}
+
+View(data)
+
+# corrplot(cor(data, use = "pairwise.complete.obs"))
+
+numeric_data <- select_if(data, is.numeric) 
+
+View(numeric_data)
+# cor_bill <- cor(numeric_data)
+# corrplot(cor_bill)
+```
+
 ## 04. Data Preprocessing
 
 Here, we handle missing data and outliers, normalize or standardize data if necessary. We encode categorical variables and split the data into training, validation, and test sets.
-
-Some Data Cleaning
-
-`gpd_country`, for example, was formatted as 2,000,000. It was cleaned to remove the \\\$ and the commas.
-
-`SelfMade` was transformed from **TRUE/FALSE** to `yes/no`
-
-`category`, `industries`, `gender`, status were cast to factor type.
-
-The resultant cleaned data is stored in a variable called **`cleaned_df`**
 
 ```{r DataProcessing}
 #omitted all nas and then parsed the gdp column to make it numeric
@@ -202,91 +196,133 @@ Classbill <-
   relocate(selfMade,.before = rank)
 
 Classbill$gdp_country = as.numeric(gsub("[\\$,]", "", Classbill$gdp_country))
-
-# (Classbill$category) 
-# (Classbill$industries)
-# levels(as.factor(Classbill$title))
-# head(Classbill)
 ```
 
 ```{r}
-cleaned_df <- 
-  Classbill |> 
-  mutate(selfMade = ifelse(selfMade, 'yes', 'no')) |> 
-  mutate(selfMade = as.factor(selfMade),
-         category = as.factor(category),
-         industries = as.factor(industries),
-         gender = as.factor(gender),
-         status = as.factor(status),
-         country = as.factor(country)) |> 
-  select(-country, -personName, -birthMonth, -birthDay, -c(cpi_country : longitude_country)) 
-
-cleaned_df <- na.omit(cleaned_df)
-summary(cleaned_df)
-
-# tail(cleaned_df)
-sapply(lapply(cleaned_df, unique), length)
+numeric_data <- select_if(Classbill, is.numeric) 
+cor_bill <- cor(numeric_data)
+# corrplot(cor_bill, method = 'number')
+corrplot(cor_bill, method = 'shade', order = 'AOE', diag = F)
+# corrplot(cor_bill, method = 'shade', order = 'AOE', addCoef.col = 'black', tl.pos = 'd',cl.pos = 'n', col = COL2('BrBG'), diag = FALSE)
+# corrplot(cor_bill, type = "upper", order = 'hclust', addCoef.col = 'black', tl.pos = 'd',
+#          cl.pos = 'n', col = COL2('PiYG'))
+# test_cor = cor.mtest(numeric_data, conf.level = 0.95)
+# corrplot(cor_bill, p.mat = test_cor$p, insig = 'p-value')
+# corrplot.mixed(cor_bill, order = "AOE")
 ```
+
+While it logically appears as though rank should be highly correlated with `finalWorth`, the plot indicates that it has a weak negative correlation with it. However, there is a high negative correlation between `life_expectancy_country` and `cpi_country`. Similarly, there is a fair positive correlation between `population_country` and `total_tax_rate_country`.
 
 ## 05. Feature Engineering
 
 Here, we create relevant features from the raw data. We perform feature selection to identify the most important features, applying domain knowledge to transform data effectively.
 
 ```{r FeatureEngineering}
-cleaned_df_lr <- 
-  cleaned_df |> 
-  select(-city)
+# Correlation Analysis
+missing_values <- colSums(is.na(data))
 
-head(cleaned_df)
-# 
-# c("country", ["cpi_country" : "longitude_country"])
-# 
-summary(lm(finalWorth ~ ., cleaned_df_lr))
+print(missing_values)
+
+complete_data <- Classbill[complete.cases(Classbill), ]
+
+numeric_data <- complete_data[sapply(complete_data, is.numeric)]
+
+correlation_results <- cor(numeric_data[, -which(names(numeric_data) == "finalWorth")], numeric_data$finalWorth)
+
+# Print the correlation results
+print(correlation_results)
 ```
+
+Rank is correlated with finalWorth. We remove that and plot the correlation to inspect for multicollinearity.
+
+```{r}
+clean_numeric_data <- numeric_data[, -1]
+correlation_matrix <- cor(clean_numeric_data[, -which(names(clean_numeric_data) == "finalWorth")])
+print(correlation_matrix)
+```
+
+```{r VIF-Multicollinearity}
+# install.packages("car")
+library(car)
+
+vif_values <- vif(lm(finalWorth ~ ., data = numeric_data))
+print(vif_values)
+```
+
+```{r Correlation-Heatmap}
+# install.packages("heatmaply")
+library(heatmaply)
+
+# Compute correlation matrix
+correlation_matrix <- cor(clean_numeric_data[, -which(names(clean_numeric_data) == "finalWorth")])
+
+# Create interactive heatmap
+heatmaply(correlation_matrix, symmetric = TRUE)
+
+```
+
+`cpi_country` and `life_expectancy_country` are highly correlated.
+
+### Random Forest Feature Selection
+
+```{r FeatureSelection-RandomForest}
+# install.packages("randomForest")
+library(randomForest)
+
+set.seed(123) 
+
+rf_model <- randomForest(finalWorth ~ ., data = complete_data)
+
+# Get feature importance
+importance <- importance(rf_model)
+
+# Sort features by importance
+sorted_importance <- importance[order(importance, decreasing = TRUE), ]
+
+# Print or inspect the sorted feature importance
+print(sorted_importance)
+```
+
+Important features based on random forest selection are `rank, age, category, total_tax_rate_country, cpi_country, gdp_country, life_expectancy_country, selfMade, population_country, gender`
+
+```{r FeatureSelection-LASSO}
+library(glmnet)
+
+# non_numeric_cols <- sapply(Classbill, is.character)
+# 
+# # If non-numeric columns are present, encode them (example using dummy encoding)
+# if (sum(non_numeric_cols) > 0) {
+#   new_data <- model.matrix(~ . - 1, data = Classbill)  # Remove intercept
+# }
+# 
+# # Remove missing values if any
+# new_data <- na.omit(new_data)
+# 
+# clean_complete_data <- cleaned_data[complete.cases(new_data), ]
+# Extract predictors and target variable
+X <- as.matrix(clean_numeric_data[, -which(names(clean_numeric_data) == "finalWorth")])
+y <- clean_numeric_data$finalWorth
+
+# Fit Lasso regression model using glmnet
+lasso_model <- cv.glmnet(X, y, alpha = 1)  # alpha = 1 for Lasso
+
+# Plot the cross-validated mean squared error vs. lambda
+plot(lasso_model)
+
+# Select the best lambda value
+best_lambda <- lasso_model$lambda.min
+cat("Best lambda value:", best_lambda, "\n")
+
+# Get coefficients for the selected lambda
+lasso_coef <- coef(lasso_model, s = best_lambda)
+print(lasso_coef)
+```
+
+Based on LASSO, `age, cpi_country, life_expectancy_country, total_tax_rate_country, and population_country` are important predictors.
 
 ## 06. Model Selection
 
 In this section, we choose the appropriate machine learning algorithms for our problem, experiment with different models and techniques to find the best one. We tune hyperparameters for optimal performance.
-
-**Linear Regression**
-
-```{r}
-sapply(lapply(cleaned_df, unique), length)
-```
-
-```{r}
-summary(lm(finalWorth ~ ., data = cleaned_df))
-```
-
-```{r}
-summary(lm(finalWorth ~ gdp_country , data = tibble_df)) 
-```
-
-```{r}
-
-tibble_df <- 
-  tibble_df |> 
-  mutate(selfMade = ifelse(selfMade, 'yes', 'no')) |> 
-  mutate(selfMade = as_factor(selfMade)) 
-  
-# summary(lm(finalWorth ~ gdpCountry , data = tibble_df)) 
-
-
-# glimpse(tibble_df)
-# summary(lm(selfMade ~ ., data = tibble_df))
-```
-
-```{r LR_FullModel}
-
-lr_data <- 
-  tibble_df |> 
-  mutate(selfMade = as.factor(selfMade)) |> 
-  lm(finalWorth ~ .) 
-# lr_fullmodel <- lm(finalWorth ~ ., data = data)
-# summary(lr_fullmodel)
-```
-
-**Logistic Regression**
 
 ```{r ModelSelection_LogisticClassification}
 #Classification LOGISTIC to predict whether the billonaire is self made or not
@@ -318,13 +354,14 @@ FPR[[i]] <- sum(Yhat == "TRUE" & Ttest$selfMade == "FALSE")/
 table(Ttest$selfMade)
 min(err.rate)
 threshold[which.min(err.rate)]
-```
 
-**KNN Classification**
+logErrorRate <- min(err.rate)
+summary(a)
+```
 
 ```{r ModelSelection_KNNClassification}
 #removing the categorical predictors category and gender
-Classbill1 = Classbill[-c(4,6)]
+Classbill1 =Classbill[-c(4,6)]
 library(class)
 set.seed(123)
 training <- .70
@@ -348,6 +385,7 @@ for (k in 1:50){
 
 paste("The k which minimizes the prediction error rate is",which.min(z))
 paste("The associated error rate is", z[which.min(z)])
+KNNErrorRate <- z[which.min(z)]
 ```
 
 ```{r}
@@ -362,16 +400,259 @@ cr = (table(Ytesting, D)[1, 1] + table(Ytesting, D)[2, 2])/(0.3*nrow(Classbill1)
 paste("The classification rate is", cr)
 ```
 
+```{r Classification tree}
+library(tree)
+Classbill1 =Classbill[-c(4,6)]
+Classbill1$selfMade <- as.factor(Classbill1$selfMade)
+set.seed(123)
+training <- .70
+s<- sample(nrow(Classbill1), floor(training*nrow(Classbill1)))
+trainingdat <- Classbill1[s,]
+testingdat <- Classbill1[-s,]
+tree <- tree(selfMade ~. , data = trainingdat)
+summary(tree)
+plot(tree)
+text(tree)
+yhat = predict(tree, newdata = testingdat, type = "class")
+table(yhat, testingdat$selfMade)
+cv <- cv.tree(tree, FUN = prune.misclass)
+cv
+plot(cv)
+trp <- prune.misclass(tree, best = 3)
+summary(trp)
+plot(trp)
+text(trp)
+```
+
+```{r}
+#training error rate
+summary(tree)$misclass[1]/summary(tree)$misclass[2] # Original
+summary(trp)$misclass[1]/summary(trp)$misclass[2] # Pruned
+
+```
+
+```{r}
+#prediction error rate 
+set.seed(123)
+yhat = predict(tree, newdata = testingdat, type = "class")
+mean(yhat != testingdat$selfMade )
+yhat = predict(trp, newdata = testingdat, type = "class")
+mean(yhat != testingdat$selfMade )
+TreeErrorRate <- mean(yhat != testingdat$selfMade )
+```
+
+```{r}
+#Visual for Presentation
+resultsClassification <- data.frame(Approach = c("Logistic Regression", "KNN", "Classification Tree"), ClassificationRate = c((1-logErrorRate), (1-KNNErrorRate), (1-TreeErrorRate)))
+ggplot(data = resultsClassification) +
+  geom_bar(mapping = aes(x = Approach, y = ClassificationRate, fill = Approach), stat = "identity")
+```
+
+```{r Classification tree}
+library(tree)
+Classbill1 =Classbill[-c(4,6)]
+test1$selfMade <- as.factor(test1$selfMade)
+set.seed(123)
+training <- .70
+s<- sample(nrow(test1), floor(training*nrow(test1)))
+trainingdat <- test1[s,]
+testingdat <- test1[-s,]
+tree <- tree(selfMade ~. , data = trainingdat)
+summary(tree)
+plot(tree)
+text(tree)
+yhat = predict(tree, newdata = testingdat, type = "class")
+table(yhat, testingdat$selfMade)
+cv <- cv.tree(tree, FUN = prune.misclass)
+cv
+plot(cv)
+trp <- prune.misclass(tree, best = 5)
+summary(trp)
+plot(trp)
+text(trp)
+```
+
+```{r ModelSelection_linear}
+# Using regression to predict final worth, therefore necessary to remove rank as it is directly correlated to final worth
+set.seed(123)
+training <- .70
+
+minus_rank <- Classbill |>
+  select(-rank)
+
+z <- sample(nrow(minus_rank), floor(training*nrow(minus_rank)))
+lm_train <- minus_rank[z,] 
+lm_test <- minus_rank[-z,] 
+
+full_base_model <- lm(finalWorth ~ ., data = lm_train)
+summary(full_base_model)
+```
+
+```{r ModelSelection_R2BICCPSetup}
+# Set up for obtaining results
+reg.fit <- regsubsets(finalWorth ~ ., data = lm_train, nvmax = 10)
+sum_reg <- summary(reg.fit)
+```
+
+```{r r2}
+# R2
+sum_reg$adjr2
+which.max(sum_reg$adjr2)
+```
+
+```{r BIC}
+#BIC
+which.min(sum_reg$bic)
+sum_reg$which[which.min(sum_reg$bic),]
+```
+
+```{r CP}
+# Cp
+which.min(abs(sum_reg$cp - 0:10))
+sum_reg$which[which.min(abs(sum_reg$cp - 0:10)),]
+```
+
+```{r ModelSelection_Stepwise}
+null_model <- lm(finalWorth ~ 1, data = lm_train)
+reg_step <- step(full_base_model, scope = list(lower = null_model, upper = full_base_model), method = "backward") # For some reason not running? 
+```
+
+```{r Lasso_Ridge_Setup}
+# Creating validation set and design matrices for train and test
+set.seed(123)
+
+x_train <- model.matrix(full_base_model)[,-1]
+y_train <- lm_train$finalWorth
+
+reg_test <- lm(finalWorth ~ ., data = minus_rank) 
+x_test <- model.matrix(reg_test)[,-1]
+y_test <- lm_test$finalWorth
+```
+
+```{r Ridge}
+# Using cross validation results to select lambda
+set.seed(123)
+r_train_cv <- cv.glmnet(x_train, y_train, alpha = 0 )
+r_train_cv
+```
+
+```{r RidgePlot}
+plot(r_train_cv)
+```
+
+```{r RidgeCont}
+ridge_min <- glmnet(x_train, y_train, alpha = 0, lambda = r_train_cv$lambda.min)
+yHat <- predict(ridge_min, newx = x_test, s = "lambda.min")
+pmse_r <-  mean((yHat - y_test)^2)
+pmse_r
+ridge_min$df
+```
+
+```{r Lasso}
+set.seed(123)
+l_train_cv <- cv.glmnet(x_train, y_train) # default alpha=1
+l_train_cv
+```
+
+```{r LassoPlot}
+plot(l_train_cv)
+```
+
+```{r LassoCont}
+lasso_1se <- glmnet(x_train, y_train, lambda = l_train_cv$lambda.1se)
+coef(lasso_1se)
+```
+
+```{r LassoCalculations}
+Hat <- predict(lasso_1se, newx = x_test, s = "lambda.1se")
+pmse_l1se <- mean((yHat - y_test)^2)
+pmse_l1se
+
+lasso_1se$df
+```
+
+```{r LassoMin}
+lasso_min <- glmnet(x_train, y_train, lambda = l_train_cv$lambda.min)
+
+coef(lasso_min)
+
+yHat <- predict(lasso_min, newx = x_test, s = "lambda.min")
+pmse_lmin <- mean((yHat - y_test)^2)
+pmse_lmin
+
+lasso_min$df
+```
+
 ## 07. Model Training
 
 Here, we train the selected model on the training data monitor the model performance on the validation set.
 
-```{r ModelTraining}
+```{r ModelTraining-StratifiedSampling}
 
 library(tidymodels)
 
-set.seed(123)
-df_split <- initial_split()
+cleaned_df <- 
+  Classbill |> 
+  mutate(selfMade = ifelse(selfMade, 'yes', 'no')) |> 
+  mutate(selfMade = as.factor(selfMade))
+
+# The class is imbalanced, hence, the need to do a stratified sampling on the training and test sets.
+cleaned_df |> 
+  count(selfMade) |> 
+  mutate(percent = n / sum(n))
+
+set.seed(1234)
+
+df_split <- initial_split(cleaned_df, strata = selfMade)
+df_train <- training(df_split)
+df_test <- testing(df_split)
+dim(df_train)
+dim(df_test)
+```
+
+```{r ModelTraining-LR-tidymodel}
+rf_df <- 
+  cleaned_df |> 
+  select(-category)
+
+non_numeric_cols <- sapply(rf_df, function(x) !is.numeric(x))
+
+# Convert non-numeric columns to factors (example)
+rf_df[, non_numeric_cols] <- lapply(rf_df[, non_numeric_cols], as.factor)
+
+# Create a recipe for pre-processing
+data_recipe <- recipe(finalWorth ~ ., data = rf_df) %>%
+  step_integer(all_nominal(), -all_outcomes()) %>%  # Convert nominal variables to integers
+  step_dummy(all_nominal(), -all_outcomes()) %>%   # Dummy encode nominal variables
+  step_normalize(all_predictors())
+
+# data_recipe <- recipe(finalWorth ~ ., data = rf_df) |> 
+#   step_normalize(all_predictors())
+
+df_split <- initial_split(rf_df, prop = 0.8, strata = selfMade)
+data_train <- training(df_split)
+data_test <- testing(df_split)
+
+# lm_fit <- lm(finalWorth ~ ., data = data_train)
+
+# summary(lm_fit)
+lm_spec <- linear_reg() |>
+  set_engine("lm")
+
+# Create a workflow
+lm_workflow <- workflow() |>
+  add_recipe(data_recipe) |>
+  add_model(lm_spec)
+
+# Train the model using stratified sampling
+lm_fit <- fit(lm_workflow, data = data_train)
+
+# Make predictions on the test set
+predictions <- predict(lm_fit, data_test)
+
+# Evaluate the model
+evaluation_metrics <- metrics(data = predictions, truth = data_test$finalWorth, estimate = .pred)
+print(evaluation_metrics)
 ```
 
 ## 08. Model Evaluation
@@ -397,3 +678,380 @@ Here, we use the test data to assess the model's generalization performance to e
 ## 10. Ethical Considerations
 
 This is not a section perse, it's just for us to ensure that the model and data collection processes adhere to ethical guidelines and do not perpetuate biases or harm.
+
+### 11. Summary 
+
+**Regression**
+
+```{r}
+library(stats)
+
+reg_data <-
+  Classbill |> 
+  select(-rank)
+
+predictor_cols <- c('age', 'cpi_country', 'gdp_country', 'life_expectancy_country', 'total_tax_rate_country')
+
+# Creating a linear regression model
+lm_model <- lm(finalWorth ~ ., data = reg_data)
+
+# Summary of the linear regression model
+summary(lm_model)
+
+# Predicting 'finalWorth' based on the model
+predicted_values <- predict(lm_model, newdata = reg_data)
+
+# Assess model performance (e.g., Mean Squared Error)
+actual_values <- Classbill$finalWorth
+rmse <- sqrt(mean((actual_values - predicted_values)^2))
+print(paste("Root Mean Squared Error for Linear Regression:", rmse))
+```
+
+**10-fold Cross Validation - Regression**
+
+```{r}
+library(stats)
+# install.packages("caret")
+library(caret)
+
+set.seed(123)
+
+ctrl <- trainControl(method = "cv", 
+                     number = 10)   
+
+lm_model_cv <- train(finalWorth ~ ., 
+                     data = Classbill, 
+                     method = "lm", 
+                     trControl = ctrl)
+
+print(lm_model_cv)
+```
+
+Lasso Regression
+
+```{r}
+library(glmnet)
+
+predictor_cols <- c('age', 'cpi_country', 'gdp_country', 'life_expectancy_country', 'total_tax_rate_country')
+
+# x <- as.matrix(Classbill[, predictor_cols])
+x <- as.matrix(clean_numeric_data)
+y <- clean_numeric_data$finalWorth
+
+lasso_model <- glmnet(x, y, alpha = 1)
+
+print(coef(lasso_model))
+
+selected_variables <- rownames(coef(lasso_model))[-1][coef(lasso_model)[-1, 1] != 0]
+print("\n\nSelected Variables:")
+print(selected_variables)
+```
+
+```{r}
+predictor_cols <- c('age', 'cpi_country', 'gdp_country', 'life_expectancy_country', 'total_tax_rate_country')
+
+# Create matrices for predictors and target variable
+x <- as.matrix(clean_numeric_data)
+y <- clean_numeric_data$finalWorth
+
+# Set up 10-fold cross-validation
+folds <- createFolds(y, k = 10, list = TRUE, returnTrain = FALSE)
+
+# Perform Lasso regression with cross-validation
+lasso_cv <- cv.glmnet(x, y, alpha = 1, nfolds = 10, foldid = folds$Fold)
+
+# Display cross-validation results
+print(lasso_cv)
+
+plot(lasso_cv)
+```
+
+RMSE and RSquared
+
+```{r}
+if (is.factor(clean_numeric_data$finalWorth)) {
+  clean_numeric_data$finalWorth <- as.numeric(as.character(clean_numeric_data$finalWorth))
+}
+
+train_control <- trainControl(method = "cv",  
+                              number = 10,     
+                              summaryFunction = defaultSummary,
+                              classProbs = FALSE,
+                              verboseIter = FALSE)
+
+lasso_grid <- expand.grid(alpha = 1, lambda = 1)
+
+lasso_model <- train(finalWorth ~ ., 
+                     data = clean_numeric_data,
+                     method = "glmnet", 
+                     trControl = train_control,
+                     tuneGrid = lasso_grid)  
+
+print("RMSE:")
+print(lasso_model$results$RMSE)
+
+print("R-squared:")
+print(1 - lasso_model$results$RMSE^2 / var(clean_numeric_data$finalWorth))
+```
+
+```{r}
+# x <- as.matrix(complete_data[, predictor_cols])
+x <- as.matrix(clean_numeric_data)
+y <- clean_numeric_data$finalWorth
+
+folds <- createFolds(y, k = 10, list = TRUE, returnTrain = FALSE)
+
+rmse_values <- c()
+rsquared_values <- c()
+
+for (i in 1:10) {
+  train_index <- unlist(folds[i])
+  test_index <- unlist(folds[-i])
+  
+  x_train <- x[train_index, ]
+  y_train <- y[train_index]
+  x_test <- x[test_index, ]
+  y_test <- y[test_index]
+  
+  lasso_model <- glmnet(x_train, y_train, alpha = 1)
+  predicted_values <- predict(lasso_model, newx = x_test)
+  
+  rmse <- sqrt(mean((y_test - predicted_values)^2))
+  rmse_values <- c(rmse_values, rmse)
+  
+  rsquared <- 1 - sum((y_test - predicted_values)^2) / sum((y_test - mean(y_test))^2)
+  rsquared_values <- c(rsquared_values, rsquared)
+}
+
+print("RMSE for each fold:")
+print(rmse_values)
+
+print("R-squared for each fold:")
+print(rsquared_values)
+
+mean_rmse <- mean(rmse_values)
+mean_rsquared <- mean(rsquared_values)
+
+print(paste("RMSE:", mean_rmse))
+```
+
+### Ridge Regression
+
+```{r}
+# Load necessary libraries for Ridge regression
+library(glmnet)
+library(caret)
+
+predictor_cols <- c('age', 'cpi_country', 'gdp_country', 'life_expectancy_country', 'total_tax_rate_country')
+
+# Convert 'finalWorth' to a numeric variable if it's a factor (for regression)
+if (is.factor(clean_numeric_data$finalWorth)) {
+  clean_numeric_data$finalWorth <- as.numeric(as.character(clean_numeric_data$finalWorth))
+}
+
+# Create matrices for predictors and target variable
+x <- as.matrix(clean_numeric_data)
+y <- clean_numeric_data$finalWorth
+
+# Set up 10-fold cross-validation
+folds <- createFolds(y, k = 10, list = TRUE, returnTrain = FALSE)
+
+# Initialize variables to store RMSE and R-squared values
+rmse_values <- c()
+rsquared_values <- c()
+selected_variables <- list()
+
+for (i in 1:10) {
+  train_index <- unlist(folds[i])
+  test_index <- unlist(folds[-i])
+  
+  x_train <- x[train_index, ]
+  y_train <- y[train_index]
+  x_test <- x[test_index, ]
+  y_test <- y[test_index]
+  
+  ridge_model <- cv.glmnet(x_train, y_train, alpha = 0)
+  
+  best_lambda <- ridge_model$lambda.min
+  
+  selected_vars <- coef(ridge_model, s = best_lambda)
+  selected_variables[[i]] <- rownames(selected_vars)[selected_vars != 0]
+  
+  predicted_values <- predict(ridge_model, newx = x_test, s = best_lambda)
+  
+  rmse <- sqrt(mean((y_test - predicted_values)^2))
+  rmse_values <- c(rmse_values, rmse)
+  
+  rsquared <- 1 - sum((y_test - predicted_values)^2) / sum((y_test - mean(y_test))^2)
+  rsquared_values <- c(rsquared_values, rsquared)
+}
+
+# Find the index of the minimum RMSE
+best_model_index <- which.min(rmse_values)
+
+# Print RMSE and R-squared values for the best model
+print("RMSE for the best model:")
+print(rmse_values[best_model_index])
+
+print("R-squared for the best model:")
+print(rsquared_values[best_model_index])
+
+# Print selected variables for the best model
+print("Selected Variables for the best model:")
+print(selected_variables[[best_model_index]])
+
+```
+
+```{r}
+library(glmnet)
+library(caret)
+
+predictor_cols <- c('age', 'cpi_country', 'gdp_country', 'life_expectancy_country', 'total_tax_rate_country')
+
+if (is.factor(clean_numeric_data$finalWorth)) {
+  clean_numeric_data$finalWorth <- as.numeric(as.character(clean_numeric_data$finalWorth))
+}
+
+# Create matrices for predictors and target variable
+x <- as.matrix(clean_numeric_data)
+y <- clean_numeric_data$finalWorth
+# Set up 10-fold cross-validation
+folds <- createFolds(y, k = 10, list = TRUE, returnTrain = FALSE)
+
+rmse_values <- c()
+rsquared_values <- c()
+selected_variables <- list()
+
+for (i in 1:10) {
+  train_index <- unlist(folds[i])
+  test_index <- unlist(folds[-i])
+  
+  x_train <- x[train_index, ]
+  y_train <- y[train_index]
+  x_test <- x[test_index, ]
+  y_test <- y[test_index]
+  
+  ridge_model <- cv.glmnet(x_train, y_train, alpha = 0)
+  
+  best_lambda <- ridge_model$lambda.min
+  
+  selected_vars <- coef(ridge_model, s = best_lambda)
+  selected_variables[[i]] <- which(selected_vars != 0)
+  
+  predicted_values <- predict(ridge_model, newx = x_test, s = best_lambda)
+  
+  rmse <- sqrt(mean((y_test - predicted_values)^2))
+  rmse_values <- c(rmse_values, rmse)
+  
+  rsquared <- 1 - sum((y_test - predicted_values)^2) / sum((y_test - mean(y_test))^2)
+  rsquared_values <- c(rsquared_values, rsquared)
+}
+
+# Find the index of the minimum RMSE
+best_model_index <- which.min(rmse_values)
+
+# Print RMSE and R-squared values for the best model
+print("RMSE for the best model:")
+print(rmse_values[best_model_index])
+
+print("R-squared for the best model:")
+print(rsquared_values[best_model_index])
+
+# Print selected variables for the best model
+print("Selected Variables for the best model:")
+print(predictor_cols[selected_variables[[best_model_index]]])
+```
+
+### Decision Tree Regression
+
+```{r}
+library(rpart)
+
+predictor_cols <- c('age', 'cpi_country', 'gdp_country', 'life_expectancy_country', 'total_tax_rate_country')
+
+formula <- as.formula(paste("finalWorth ~", paste(predictor_cols, collapse = " + ")))
+
+tree_model <- rpart(formula, data = complete_data, method = "anova")
+
+print(summary(tree_model))
+
+# install.packages("rpart.plot")
+library(rpart.plot)
+rpart.plot(tree_model)
+```
+
+### Comparing the models
+
+```{r}
+
+test_x <- df_test[, predictor_cols]  # Predictor columns in test dataset
+test_y <- df_test$finalWorth  # Actual target variable in test dataset
+
+# cols(test_x)
+lm_predicted <- predict(lm_model, newdata = test_x)
+lasso_predicted <- predict(lasso_model, newx = test_x)
+ridge_predicted <- predict(ridge_model, newx = test_x)
+tree_predicted <- predict(tree_model, newdata = test_x)
+
+# Calculate evaluation metrics for each model
+lm_rmse <- sqrt(mean((test_y - lm_predicted)^2))
+lm_rsquared <- 1 - sum((test_y - lm_predicted)^2) / sum((test_y - mean(test_y))^2)
+
+lasso_rmse <- sqrt(mean((test_y - lasso_predicted)^2))
+lasso_rsquared <- 1 - sum((test_y - lasso_predicted)^2) / sum((test_y - mean(test_y))^2)
+
+ridge_rmse <- sqrt(mean((test_y - ridge_predicted)^2))
+ridge_rsquared <- 1 - sum((test_y - ridge_predicted)^2) / sum((test_y - mean(test_y))^2)
+
+tree_rmse <- sqrt(mean((test_y - tree_predicted)^2))
+tree_rsquared <- 1 - sum((test_y - tree_predicted)^2) / sum((test_y - mean(test_y))^2)
+
+# Displaying results
+cat("Linear Regression RMSE:", lm_rmse, "\n")
+cat("Linear Regression R-squared:", lm_rsquared, "\n\n")
+
+cat("Lasso Regression RMSE:", lasso_rmse, "\n")
+cat("Lasso Regression R-squared:", lasso_rsquared, "\n\n")
+
+cat("Ridge Regression RMSE:", ridge_rmse, "\n")
+cat("Ridge Regression R-squared:", ridge_rsquared, "\n\n")
+
+cat("Decision Tree Regression RMSE:", tree_rmse, "\n")
+cat("Decision Tree Regression R-squared:", tree_rsquared, "\n")
+
+```
+
+```{r}
+# Load necessary libraries for cross-validation and model comparison
+library(caret)
+
+# Assuming your dataset is stored in a variable named 'dataset'
+
+# Assuming 'finalWorth' is the target variable and other columns are predictors
+# Replace predictor columns accordingly based on your dataset
+predictor_cols <- c('age', 'cpi_country', 'gdp_country', 'life_expectancy_country', 'total_tax_rate_country')
+
+# Create a training control for 10-fold cross-validation
+train_control <- trainControl(method = "cv", number = 10)
+
+# List of models to compare
+models <- c("lm", "lasso", "ridge", "rpart")  # Add or remove models as needed
+
+# Store RMSE values for each model
+rmse_values <- c()
+
+# Train and evaluate each model using cross-validation
+for (model in models) {
+  model_result <- train(finalWorth ~ ., data = clean_numeric_data, method = model, trControl = train_control)
+  rmse <- sqrt(mean(model_result$results$RMSE))
+  rmse_values <- c(rmse_values, rmse)
+}
+
+# Create a data frame with model names and RMSE values
+comparison_df <- data.frame(Model = models, RMSE = rmse_values)
+
+# Display the comparison of models based on RMSE
+print("Cross-validated RMSE for each model:")
+print(comparison_df)
+
+```
