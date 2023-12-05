@@ -297,7 +297,7 @@ print(lasso_coef)
 
 Based on LASSO, `age, cpi_country, life_expectancy_country, total_tax_rate_country, and population_country` are important predictors.
 
-```{r FeatureSelection-Linear-R2CPBIC}
+```{r FeatureSelection-Linear-R2CPBIC, warning=FALSE}
 set.seed(123)
 training <- .70
 
@@ -313,15 +313,18 @@ reg.fit <- regsubsets(finalWorth ~ ., data = lm_train, nvmax = 10)
 sum_reg <- summary(reg.fit)
 
 # R2
+paste("The R2 values are:")
 sum_reg$adjr2
-which.max(sum_reg$adjr2)
+paste(" The best R2 value belongs to a model using ", which.max(sum_reg$adjr2), "variables.")
 
 #BIC
-which.min(sum_reg$bic)
+paste("The minimum BIC belongs to a model with", which.min(sum_reg$bic), "variables.")
+paste("BIC variable breakdown:")
 sum_reg$which[which.min(sum_reg$bic),]
 
 # CP
-which.min(abs(sum_reg$cp - 0:10))
+paste("The minimum BIC belongs to a model with", which.min(abs(sum_reg$cp - 0:10)), "variables.")
+paste("CP variable breakdown:")
 sum_reg$which[which.min(abs(sum_reg$cp - 0:10)),]
 ```
 
