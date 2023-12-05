@@ -125,37 +125,11 @@ library(corrplot)
 ```{r}
 data <- read_csv("data/Billionaires.csv")
 nrow(data)
-ncol(data)
-# is.na
+ncol(data)is.na
 # head(data)
 # dim(data)
 glimpse(data)
 # colSums(is.na(data))
-```
-
-```{r EDA}
-# Comparing male and female final worth
-data <- 
-  data |> 
-  mutate(selfMade = ifelse(selfMade, 'yes', 'no')) |> 
-  mutate(selfMade = as.factor(selfMade))
-  
-data |> 
-  ggplot(aes(finalWorth, fill = gender)) + 
-  geom_density(alpha = 0.8) +
-  scale_x_log10()
-
-# Comparing selfmade billionaires
-data |> 
-  ggplot(aes(finalWorth, fill = selfMade)) + 
-  geom_density(alpha = 0.8) +
-  scale_x_log10()
-
-data |>
-  ggplot(aes(x = industries, finalWorth)) +
-  geom_histogram(aes(fill = selfMade), stat = "identity") +
-  coord_flip() +
-  facet_wrap(~ gender)
 ```
 
 ```{r}
@@ -178,6 +152,26 @@ numeric_data <- select_if(data, is.numeric)
 View(numeric_data)
 # cor_bill <- cor(numeric_data)
 # corrplot(cor_bill)
+```
+
+```{r EDA}
+# Comparing male and female final worth
+data |> 
+  ggplot(aes(finalWorth, fill = gender)) + 
+  geom_density(alpha = 0.8) +
+  scale_x_log10()
+
+# Comparing selfmade billionaires
+data |> 
+  ggplot(aes(finalWorth, fill = selfMade)) + 
+  geom_density(alpha = 0.8) +
+  scale_x_log10()
+
+data |>
+  ggplot(aes(x = industries, finalWorth)) +
+  geom_histogram(aes(fill = selfMade), stat = "identity") +
+  coord_flip() +
+  facet_wrap(~ gender)
 ```
 
 ## 04. Data Preprocessing
@@ -237,7 +231,7 @@ Rank is correlated with finalWorth. We remove that and plot the correlation to i
 
 ```{r}
 clean_numeric_data <- numeric_data[, -1]
-correlation_matrix <- cor(clean_numeric_data[, -which(names(clean_numeric_data) == "finalWorth")])
+correlation_matrix <- cor(numeric_data[, -which(names(numeric_data) == "finalWorth")])
 print(correlation_matrix)
 ```
 
@@ -679,379 +673,93 @@ Here, we use the test data to assess the model's generalization performance to e
 
 This is not a section perse, it's just for us to ensure that the model and data collection processes adhere to ethical guidelines and do not perpetuate biases or harm.
 
-### 11. Summary 
+## Summary
 
-**Regression**
-
-```{r}
-library(stats)
-
-reg_data <-
-  Classbill |> 
-  select(-rank)
-
-predictor_cols <- c('age', 'cpi_country', 'gdp_country', 'life_expectancy_country', 'total_tax_rate_country')
-
-# Creating a linear regression model
-lm_model <- lm(finalWorth ~ ., data = reg_data)
-
-# Summary of the linear regression model
-summary(lm_model)
-
-# Predicting 'finalWorth' based on the model
-predicted_values <- predict(lm_model, newdata = reg_data)
-
-# Assess model performance (e.g., Mean Squared Error)
-actual_values <- Classbill$finalWorth
-rmse <- sqrt(mean((actual_values - predicted_values)^2))
-print(paste("Root Mean Squared Error for Linear Regression:", rmse))
-```
-
-**10-fold Cross Validation - Regression**
+### Regression
 
 ```{r}
 library(stats)
-# install.packages("caret")
 library(caret)
 
 set.seed(123)
+
+predictor_cols <- c('selfMade', 'age', 'cpi_country', 'gdp_country', 'life_expectancy_country', 'total_tax_rate_country')
 
 ctrl <- trainControl(method = "cv", 
                      number = 10)   
 
 lm_model_cv <- train(finalWorth ~ ., 
-                     data = Classbill, 
+                     data = Classbill[, c('finalWorth', predictor_cols)], 
                      method = "lm", 
                      trControl = ctrl)
 
+# View cross-validation results
 print(lm_model_cv)
 ```
 
-Lasso Regression
-
 ```{r}
-library(glmnet)
+lm_df <- 
+  Classbill |> 
+  select(-rank, -selfMade, -category)
+summary(lm(finalWorth ~ ., data = lm_df))
 
-predictor_cols <- c('age', 'cpi_country', 'gdp_country', 'life_expectancy_country', 'total_tax_rate_country')
-
-# x <- as.matrix(Classbill[, predictor_cols])
-x <- as.matrix(clean_numeric_data)
-y <- clean_numeric_data$finalWorth
-
-lasso_model <- glmnet(x, y, alpha = 1)
-
-print(coef(lasso_model))
-
-selected_variables <- rownames(coef(lasso_model))[-1][coef(lasso_model)[-1, 1] != 0]
-print("\n\nSelected Variables:")
-print(selected_variables)
 ```
 
+### LASSO Regression
+
 ```{r}
-predictor_cols <- c('age', 'cpi_country', 'gdp_country', 'life_expectancy_country', 'total_tax_rate_country')
 
-# Create matrices for predictors and target variable
-x <- as.matrix(clean_numeric_data)
-y <- clean_numeric_data$finalWorth
+x <- as.matrix(Classbill[, predictor_cols])
+y <- Classbill$finalWorth
 
-# Set up 10-fold cross-validation
 folds <- createFolds(y, k = 10, list = TRUE, returnTrain = FALSE)
 
-# Perform Lasso regression with cross-validation
 lasso_cv <- cv.glmnet(x, y, alpha = 1, nfolds = 10, foldid = folds$Fold)
 
-# Display cross-validation results
-print(lasso_cv)
+mse_values <- lasso_cv$cvm
+
+# Display the MSE values for Lasso regression
+print("Cross-validated RMSE for Lasso regression:")
+print(sqrt(min(lasso_cv$cvm)))
 
 plot(lasso_cv)
 ```
 
-RMSE and RSquared
+### Ridge regression
 
 ```{r}
-if (is.factor(clean_numeric_data$finalWorth)) {
-  clean_numeric_data$finalWorth <- as.numeric(as.character(clean_numeric_data$finalWorth))
-}
+# predictor_cols <- c('age', 'cpi_country', 'gdp_country', 'life_expectancy_country', 'total_tax_rate_country')
 
-train_control <- trainControl(method = "cv",  
-                              number = 10,     
-                              summaryFunction = defaultSummary,
-                              classProbs = FALSE,
-                              verboseIter = FALSE)
+# Prepare data
+x <- as.matrix(Classbill[, predictor_cols])
+y <- Classbill$finalWorth
 
-lasso_grid <- expand.grid(alpha = 1, lambda = 1)
+# Perform Ridge regression with cross-validation using cv.glmnet
+ridge_cv <- cv.glmnet(x, y, alpha = 0, lambda = seq(0.001, 1, length = 100), nfolds = 10)  # Update lambda values and nfolds as needed
 
-lasso_model <- train(finalWorth ~ ., 
-                     data = clean_numeric_data,
-                     method = "glmnet", 
-                     trControl = train_control,
-                     tuneGrid = lasso_grid)  
+# Get the lambda value that minimizes cross-validated error
+best_lambda <- ridge_cv$lambda.min
 
-print("RMSE:")
-print(lasso_model$results$RMSE)
+# Predict using the best model
+predicted_values <- predict(ridge_cv, newx = x, s = best_lambda)
 
-print("R-squared:")
-print(1 - lasso_model$results$RMSE^2 / var(clean_numeric_data$finalWorth))
+# Calculate RMSE
+rmse <- sqrt(mean((y - predicted_values)^2))
+
+# Display the RMSE for Ridge regression
+print("Root Mean Squared Error (RMSE) for Ridge regression:")
+print(rmse)
 ```
 
-```{r}
-# x <- as.matrix(complete_data[, predictor_cols])
-x <- as.matrix(clean_numeric_data)
-y <- clean_numeric_data$finalWorth
-
-folds <- createFolds(y, k = 10, list = TRUE, returnTrain = FALSE)
-
-rmse_values <- c()
-rsquared_values <- c()
-
-for (i in 1:10) {
-  train_index <- unlist(folds[i])
-  test_index <- unlist(folds[-i])
-  
-  x_train <- x[train_index, ]
-  y_train <- y[train_index]
-  x_test <- x[test_index, ]
-  y_test <- y[test_index]
-  
-  lasso_model <- glmnet(x_train, y_train, alpha = 1)
-  predicted_values <- predict(lasso_model, newx = x_test)
-  
-  rmse <- sqrt(mean((y_test - predicted_values)^2))
-  rmse_values <- c(rmse_values, rmse)
-  
-  rsquared <- 1 - sum((y_test - predicted_values)^2) / sum((y_test - mean(y_test))^2)
-  rsquared_values <- c(rsquared_values, rsquared)
-}
-
-print("RMSE for each fold:")
-print(rmse_values)
-
-print("R-squared for each fold:")
-print(rsquared_values)
-
-mean_rmse <- mean(rmse_values)
-mean_rsquared <- mean(rsquared_values)
-
-print(paste("RMSE:", mean_rmse))
-```
-
-### Ridge Regression
+### Plot for the results
 
 ```{r}
-# Load necessary libraries for Ridge regression
-library(glmnet)
-library(caret)
-
-predictor_cols <- c('age', 'cpi_country', 'gdp_country', 'life_expectancy_country', 'total_tax_rate_country')
-
-# Convert 'finalWorth' to a numeric variable if it's a factor (for regression)
-if (is.factor(clean_numeric_data$finalWorth)) {
-  clean_numeric_data$finalWorth <- as.numeric(as.character(clean_numeric_data$finalWorth))
-}
-
-# Create matrices for predictors and target variable
-x <- as.matrix(clean_numeric_data)
-y <- clean_numeric_data$finalWorth
-
-# Set up 10-fold cross-validation
-folds <- createFolds(y, k = 10, list = TRUE, returnTrain = FALSE)
-
-# Initialize variables to store RMSE and R-squared values
-rmse_values <- c()
-rsquared_values <- c()
-selected_variables <- list()
-
-for (i in 1:10) {
-  train_index <- unlist(folds[i])
-  test_index <- unlist(folds[-i])
-  
-  x_train <- x[train_index, ]
-  y_train <- y[train_index]
-  x_test <- x[test_index, ]
-  y_test <- y[test_index]
-  
-  ridge_model <- cv.glmnet(x_train, y_train, alpha = 0)
-  
-  best_lambda <- ridge_model$lambda.min
-  
-  selected_vars <- coef(ridge_model, s = best_lambda)
-  selected_variables[[i]] <- rownames(selected_vars)[selected_vars != 0]
-  
-  predicted_values <- predict(ridge_model, newx = x_test, s = best_lambda)
-  
-  rmse <- sqrt(mean((y_test - predicted_values)^2))
-  rmse_values <- c(rmse_values, rmse)
-  
-  rsquared <- 1 - sum((y_test - predicted_values)^2) / sum((y_test - mean(y_test))^2)
-  rsquared_values <- c(rsquared_values, rsquared)
-}
-
-# Find the index of the minimum RMSE
-best_model_index <- which.min(rmse_values)
-
-# Print RMSE and R-squared values for the best model
-print("RMSE for the best model:")
-print(rmse_values[best_model_index])
-
-print("R-squared for the best model:")
-print(rsquared_values[best_model_index])
-
-# Print selected variables for the best model
-print("Selected Variables for the best model:")
-print(selected_variables[[best_model_index]])
-
-```
-
-```{r}
-library(glmnet)
-library(caret)
-
-predictor_cols <- c('age', 'cpi_country', 'gdp_country', 'life_expectancy_country', 'total_tax_rate_country')
-
-if (is.factor(clean_numeric_data$finalWorth)) {
-  clean_numeric_data$finalWorth <- as.numeric(as.character(clean_numeric_data$finalWorth))
-}
-
-# Create matrices for predictors and target variable
-x <- as.matrix(clean_numeric_data)
-y <- clean_numeric_data$finalWorth
-# Set up 10-fold cross-validation
-folds <- createFolds(y, k = 10, list = TRUE, returnTrain = FALSE)
-
-rmse_values <- c()
-rsquared_values <- c()
-selected_variables <- list()
-
-for (i in 1:10) {
-  train_index <- unlist(folds[i])
-  test_index <- unlist(folds[-i])
-  
-  x_train <- x[train_index, ]
-  y_train <- y[train_index]
-  x_test <- x[test_index, ]
-  y_test <- y[test_index]
-  
-  ridge_model <- cv.glmnet(x_train, y_train, alpha = 0)
-  
-  best_lambda <- ridge_model$lambda.min
-  
-  selected_vars <- coef(ridge_model, s = best_lambda)
-  selected_variables[[i]] <- which(selected_vars != 0)
-  
-  predicted_values <- predict(ridge_model, newx = x_test, s = best_lambda)
-  
-  rmse <- sqrt(mean((y_test - predicted_values)^2))
-  rmse_values <- c(rmse_values, rmse)
-  
-  rsquared <- 1 - sum((y_test - predicted_values)^2) / sum((y_test - mean(y_test))^2)
-  rsquared_values <- c(rsquared_values, rsquared)
-}
-
-# Find the index of the minimum RMSE
-best_model_index <- which.min(rmse_values)
-
-# Print RMSE and R-squared values for the best model
-print("RMSE for the best model:")
-print(rmse_values[best_model_index])
-
-print("R-squared for the best model:")
-print(rsquared_values[best_model_index])
-
-# Print selected variables for the best model
-print("Selected Variables for the best model:")
-print(predictor_cols[selected_variables[[best_model_index]]])
-```
-
-### Decision Tree Regression
-
-```{r}
-library(rpart)
-
-predictor_cols <- c('age', 'cpi_country', 'gdp_country', 'life_expectancy_country', 'total_tax_rate_country')
-
-formula <- as.formula(paste("finalWorth ~", paste(predictor_cols, collapse = " + ")))
-
-tree_model <- rpart(formula, data = complete_data, method = "anova")
-
-print(summary(tree_model))
-
-# install.packages("rpart.plot")
-library(rpart.plot)
-rpart.plot(tree_model)
-```
-
-### Comparing the models
-
-```{r}
-
-test_x <- df_test[, predictor_cols]  # Predictor columns in test dataset
-test_y <- df_test$finalWorth  # Actual target variable in test dataset
-
-# cols(test_x)
-lm_predicted <- predict(lm_model, newdata = test_x)
-lasso_predicted <- predict(lasso_model, newx = test_x)
-ridge_predicted <- predict(ridge_model, newx = test_x)
-tree_predicted <- predict(tree_model, newdata = test_x)
-
-# Calculate evaluation metrics for each model
-lm_rmse <- sqrt(mean((test_y - lm_predicted)^2))
-lm_rsquared <- 1 - sum((test_y - lm_predicted)^2) / sum((test_y - mean(test_y))^2)
-
-lasso_rmse <- sqrt(mean((test_y - lasso_predicted)^2))
-lasso_rsquared <- 1 - sum((test_y - lasso_predicted)^2) / sum((test_y - mean(test_y))^2)
-
-ridge_rmse <- sqrt(mean((test_y - ridge_predicted)^2))
-ridge_rsquared <- 1 - sum((test_y - ridge_predicted)^2) / sum((test_y - mean(test_y))^2)
-
-tree_rmse <- sqrt(mean((test_y - tree_predicted)^2))
-tree_rsquared <- 1 - sum((test_y - tree_predicted)^2) / sum((test_y - mean(test_y))^2)
-
-# Displaying results
-cat("Linear Regression RMSE:", lm_rmse, "\n")
-cat("Linear Regression R-squared:", lm_rsquared, "\n\n")
-
-cat("Lasso Regression RMSE:", lasso_rmse, "\n")
-cat("Lasso Regression R-squared:", lasso_rsquared, "\n\n")
-
-cat("Ridge Regression RMSE:", ridge_rmse, "\n")
-cat("Ridge Regression R-squared:", ridge_rsquared, "\n\n")
-
-cat("Decision Tree Regression RMSE:", tree_rmse, "\n")
-cat("Decision Tree Regression R-squared:", tree_rsquared, "\n")
-
-```
-
-```{r}
-# Load necessary libraries for cross-validation and model comparison
-library(caret)
-
-# Assuming your dataset is stored in a variable named 'dataset'
-
-# Assuming 'finalWorth' is the target variable and other columns are predictors
-# Replace predictor columns accordingly based on your dataset
-predictor_cols <- c('age', 'cpi_country', 'gdp_country', 'life_expectancy_country', 'total_tax_rate_country')
-
-# Create a training control for 10-fold cross-validation
-train_control <- trainControl(method = "cv", number = 10)
-
-# List of models to compare
-models <- c("lm", "lasso", "ridge", "rpart")  # Add or remove models as needed
-
-# Store RMSE values for each model
-rmse_values <- c()
-
-# Train and evaluate each model using cross-validation
-for (model in models) {
-  model_result <- train(finalWorth ~ ., data = clean_numeric_data, method = model, trControl = train_control)
-  rmse <- sqrt(mean(model_result$results$RMSE))
-  rmse_values <- c(rmse_values, rmse)
-}
-
-# Create a data frame with model names and RMSE values
-comparison_df <- data.frame(Model = models, RMSE = rmse_values)
-
-# Display the comparison of models based on RMSE
-print("Cross-validated RMSE for each model:")
-print(comparison_df)
-
+ggplot(data = data.frame(Regression_Methods = c("Linear Regression", "Ridge Regression", "Lasso Regression"), y = c(9669.946,10165.26, 10199.91))) +
+  geom_histogram(aes(x = Regression_Methods, y = y, fill = Regression_Methods), stat = "identity") +
+  ggtitle(
+    label = "Comparison between the select regression methods"
+  ) +
+  xlab("Regression Methods") +
+  ylab("RMSE") +
+  guides(fill = FALSE)
 ```
