@@ -1,6 +1,6 @@
 ---
 title: "An Analysis of Billionaires of the World"
-date: 2023-11-06
+date: 2023-12-05
 author:
   - name: "Akash Agrawal Bejarano, Ama K. Appau, Johnson Odejide, Josh Hall"
     email: "{}, {}, bo5104a@american.edu, {}"
