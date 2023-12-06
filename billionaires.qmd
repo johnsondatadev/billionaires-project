@@ -1,5 +1,5 @@
 ---
-title: "Homework 9 - Ridge and Lasso"
+title: "An Analysis of Billionaires of the World"
 date: 2023-11-06
 author:
   - name: "Akash Agrawal Bejarano, Ama K. Appau, Johnson Odejide, Josh Hall"
