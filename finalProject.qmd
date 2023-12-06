@@ -1,0 +1,501 @@
+---
+title: "Homework 9 - Ridge and Lasso"
+date: 2023-11-06
+author:
+  - name: "Akash Agrawal Bejarano, Ama K. Appau, Johnson Odejide, Josh Hall"
+    email: "{}, {}, bo5104a@american.edu, {}"
+    affiliation: 
+      - name: American University
+        city: Washington
+        state: DC
+        url: www.american.edu
+copyright: 
+  holder: Machine Teachers
+  year: 2023
+format: 
+  html:
+    toc: true
+    toc-title: Questions
+    toc-location: left
+    toc-depth: 2
+    toc-expand: true
+editor: visual
+execute: 
+  warning: false
+  error: false
+theme: 
+  light: flatly
+  dark: darkly
+embed-resources: true
+---
+
+## 01. Problem Definition
+
+Becoming a billionaire is what many people look forward to, but what does it take to become one, are there specific things to do, or qualities to possess. Are billionaires self made or did they inherit their wealth? What can make a person's net worth improve in a way that one can rank among these billionaires, are there things to watch out for?
+
+These are the curiosities we have about this work that we seek an answer to as we explore the predictability of a billionaire as to whether they are self made or they inherited their wealth, as well as what the significant predictors are for the net worth of a billionaire.
+
+## 02. Data Collection
+
+Data Source - <https://www.kaggle.com/datasets/nelgiriyewithana/billionaires-statistics-dataset?select=Billionaires+Statistics+Dataset.csv>
+
+Data Description:
+
+-   **rank**: The ranking of the billionaire in terms of wealth.
+
+-   **finalWorth**: The final net worth of the billionaire in U.S. dollars.
+
+-   **category**: The category or industry in which the billionaire's business operates.Instal
+
+-   **personName**: The full name of the billionaire.
+
+-   **age**: The age of the billionaire.
+
+-   **country**: The country in which the billionaire resides.
+
+-   **city**: The city in which the billionaire resides.
+
+-   **source**: The source of the billionaire's wealth.
+
+-   **industries**: The industries associated with the billionaire's business interests.
+
+-   **countryOfCitizenship**: The country of citizenship of the billionaire.
+
+-   **organization**: The name of the organization or company associated with the billionaire.
+
+-   **selfMade**: Indicates whether the billionaire is self-made (True/False).
+
+-   **status**: "D" represents self-made billionaires (Founders/Entrepreneurs) and "U" indicates inherited or unearned wealth.
+
+-   **gender**: The gender of the billionaire.
+
+-   **birthDate**: The birthdate of the billionaire.
+
+-   **lastName**: The last name of the billionaire.
+
+-   **firstName**: The first name of the billionaire.
+
+-   **title**: The title or honorific of the billionaire.
+
+-   **date**: The date of data collection.
+
+-   **state**: The state in which the billionaire resides.
+
+-   **residenceStateRegion**: The region or state of residence of the billionaire.
+
+-   **birthYear**: The birth year of the billionaire.
+
+-   **birthMonth**: The birth month of the billionaire.
+
+-   **birthDay**: The birth day of the billionaire.
+
+-   **cpi_country**: Consumer Price Index (CPI) for the billionaire's country.
+
+-   **cpi_change_country**: CPI change for the billionaire's country.
+
+-   **gdp_country**: Gross Domestic Product (GDP) for the billionaire's country.
+
+-   **gross_tertiary_education_enrollment**: Enrollment in tertiary education in the billionaire's country.
+
+-   **gross_primary_education_enrollment_country**: Enrollment in primary education in the billionaire's country.
+
+-   **life_expectancy_country**: Life expectancy in the billionaire's country.
+
+-   **tax_revenue_country_country**: Tax revenue in the billionaire's country.
+
+-   **total_tax_rate_country**: Total tax rate in the billionaire's country.
+
+-   **population_country**: Population of the billionaire's country.
+
+-   **latitude_country**: Latitude coordinate of the billionaire's country.
+
+-   **longitude_country**: Longitude coordinate of the billionaire's country.
+
+Load the required libraries
+
+```{r}
+library(tidyverse)
+library(tidymodels)
+# library(recipeselectors)
+library(dplyr)
+library(ggplot2)
+library(leaps)
+library(glmnet)
+library(corrplot)
+```
+
+Load the data
+
+```{r}
+data <- read_csv("Billionaires.csv")
+nrow(data)
+ncol(data)
+# head(data)
+# dim(data)
+glimpse(data)
+dim(data)
+```
+
+The data contains 2640 observations of 35 features (variables)
+
+## 03. Exploratory Data Analysis
+
+```{r}
+# Comparing male and female final worth
+data |> 
+  ggplot(aes(finalWorth, fill = gender)) + 
+  geom_density(alpha = 0.8) +
+  scale_x_log10()
+
+# Comparing selfmade billionaires
+data |> 
+  ggplot(aes(finalWorth, fill = selfMade)) + 
+  geom_density(alpha = 0.8) +
+  scale_x_log10()
+
+data |>
+  ggplot(aes(x = industries, finalWorth)) +
+  geom_histogram(aes(fill = selfMade), stat = "identity") +
+  coord_flip() +
+  facet_wrap(~ gender)
+```
+
+## 04. Data cleaning
+
+We removed the columns with a lot of NAs and the ones which we wont use. For instance, latitude and longitude
+
+```{r}
+data <- mutate(data, age = na_if(age, -1))
+data <- data[-c(4,6:11,13,15:24,26,28,29,31,34,35)]
+
+colSums(is.na(data))
+cleaned_data <- na.omit(data)
+dim(cleaned_data)
+colSums(is.na(cleaned_data))
+
+Classbill <-
+  cleaned_data |>
+  relocate(selfMade,.before = rank)
+
+Classbill$gdp_country = as.numeric(gsub("[\\$,]", "", Classbill$gdp_country))
+```
+
+```{r}
+numeric_data <- select_if(Classbill, is.numeric) 
+cor_bill <- cor(numeric_data)
+# corrplot(cor_bill, method = 'number')
+corrplot(cor_bill, method = 'shade', order = 'AOE', diag = F)
+```
+
+While it logically appears as though rank should be highly correlated with `finalWorth`, the plot indicates that it has a weak negative correlation with it. However, there is a high negative correlation between `life_expectancy_country` and `cpi_country`. Similarly, there is a fair positive correlation between `population_country` and `total_tax_rate_country`.
+
+## 05. Classification Models
+
+### Logistic Regression
+
+```{r}
+set.seed(123)
+training <- .70
+s <- sample(nrow(Classbill), floor(training*nrow(Classbill)))
+Ttrain<-Classbill[s,] 
+Ttest<-Classbill[-s,] 
+
+a <-  glm(as.factor(selfMade) ~ ., family = "binomial", data = Ttrain)
+
+Testp<- predict(a, type = "response",  newdata = Ttest)
+
+threshold <- seq(0, 1, .01)
+TPR <-  FPR <- err.rate <- rep(0, length(threshold))
+
+
+for (i in seq_along(threshold)) {
+Yhat <- rep(NA_character_, nrow(Ttest)) 
+Yhat <-  ifelse(Testp >= threshold[[i]], "TRUE", "FALSE")
+
+err.rate[i] <- mean(Yhat != Ttest$selfMade)
+TPR[[i]] <- sum(Yhat == "TRUE" & Ttest$selfMade == "FALSE")/
+  sum(Ttest$selfMade == "TRUE")
+FPR[[i]] <- sum(Yhat == "TRUE" & Ttest$selfMade == "FALSE")/
+  sum(Ttest$selfMade == "FALSE")
+}
+
+table(Ttest$selfMade)
+min(err.rate)
+threshold[which.min(err.rate)]
+
+logErrorRate <- min(err.rate)
+summary(a)
+```
+
+### KNN Classification
+
+```{r}
+#removing the categorical predictors category and gender
+Classbill1 = Classbill[-c(4,6)]
+library(class)
+set.seed(123)
+training <- .70
+s<- sample(nrow(Classbill1), floor(training*nrow(Classbill1)))
+
+Xtraining<-Classbill1[s,2:9] 
+Ytraining<- Classbill1$selfMade[s]  
+Xtesting <- Classbill1[-s,2:9]
+Ytesting <- Classbill1$selfMade[-s]
+
+z <- rep(1:50)
+x <- rep(1:50)
+c <- rep(1:50)
+
+for (k in 1:50){
+  D <- knn(Xtraining, Xtesting, Ytraining, k = k) 
+  z[k] <- mean(D != Ytesting) 
+  x[k] <- sum(D == 1 & Ytesting == 1) / sum(Ytesting == 1) 
+  c[k] <- sum(D == 1 & Ytesting == 0) / sum(Ytesting == 0)  
+}
+
+paste("The k which minimizes the prediction error rate is",which.min(z))
+paste("The associated error rate is", z[which.min(z)])
+KNNErrorRate <- z[which.min(z)]
+```
+
+```{r}
+set.seed(123)
+training <- .70
+D <- knn(Xtraining, Xtesting, Ytraining, k = 14) 
+table(Ytesting,D)
+```
+
+```{r}
+cr = (table(Ytesting, D)[1, 1] + table(Ytesting, D)[2, 2])/(0.3*nrow(Classbill1))
+paste("The classification rate is", cr)
+```
+
+### Classification Tree
+
+```{r}
+library(tree)
+Classbill1 =Classbill[-c(4,6)]
+Classbill1$selfMade <- as.factor(Classbill1$selfMade)
+set.seed(123)
+training <- .70
+s<- sample(nrow(Classbill1), floor(training*nrow(Classbill1)))
+trainingdat <- Classbill1[s,]
+testingdat <- Classbill1[-s,]
+tree <- tree(selfMade ~. , data = trainingdat)
+summary(tree)
+plot(tree)
+text(tree)
+yhat = predict(tree, newdata = testingdat, type = "class")
+table(yhat, testingdat$selfMade)
+cv <- cv.tree(tree, FUN = prune.misclass)
+cv
+plot(cv)
+trp <- prune.misclass(tree, best = 3)
+summary(trp)
+plot(trp)
+text(trp)
+```
+
+```{r}
+#training error rate
+summary(tree)$misclass[1]/summary(tree)$misclass[2] # Original
+summary(trp)$misclass[1]/summary(trp)$misclass[2] # Pruned
+```
+
+```{r}
+#prediction error rate 
+set.seed(123)
+yhat = predict(tree, newdata = testingdat, type = "class")
+mean(yhat != testingdat$selfMade )
+yhat = predict(trp, newdata = testingdat, type = "class")
+mean(yhat != testingdat$selfMade )
+TreeErrorRate <- mean(yhat != testingdat$selfMade )
+```
+
+## 06. Regression
+
+### Linear Regression
+
+```{r}
+set.seed(123)
+training <- .70
+
+minus_rank <- Classbill |>
+  select(-rank)
+
+z <- sample(nrow(minus_rank), floor(training*nrow(minus_rank)))
+lm_train <- minus_rank[z,] 
+lm_test <- minus_rank[-z,] 
+
+full_base_model <- lm(finalWorth ~ ., data = lm_train)
+summary(full_base_model)
+```
+
+### LASSO Regression
+
+```{r}
+set.seed(123)
+
+x_train <- model.matrix(full_base_model)[,-1]
+y_train <- lm_train$finalWorth
+
+reg_test <- lm(finalWorth ~ ., data = minus_rank) 
+x_test <- model.matrix(reg_test)[,-1]
+y_test <- lm_test$finalWorth
+
+set.seed(123)
+l_train_cv <- cv.glmnet(x_train, y_train) # default alpha=1
+l_train_cv
+
+plot(l_train_cv)
+```
+
+```{r}
+lasso_1se <- glmnet(x_train, y_train, lambda = l_train_cv$lambda.1se)
+coef(lasso_1se)
+
+```
+
+```{r}
+lasso_min <- glmnet(x_train, y_train, lambda = l_train_cv$lambda.min)
+
+coef(lasso_min)
+
+yHat <- predict(lasso_min, newx = x_test, s = "lambda.min")
+pmse_lmin <- mean((yHat - y_test)^2)
+pmse_lmin
+
+lasso_min$df
+```
+
+```{r}
+Hat <- predict(lasso_1se, newx = x_test, s = "lambda.1se")
+pmse_l1se <- mean((yHat - y_test)^2)
+pmse_l1se
+
+lasso_1se$df
+```
+
+### Ridge Regression
+
+```{r}
+
+# Using cross validation results to select lambda
+set.seed(123)
+r_train_cv <- cv.glmnet(x_train, y_train, alpha = 0 )
+r_train_cv
+plot(r_train_cv)
+```
+
+```{r}
+ridge_min <- glmnet(x_train, y_train, alpha = 0, lambda = r_train_cv$lambda.min)
+yHat <- predict(ridge_min, newx = x_test, s = "lambda.min")
+pmse_r <-  mean((yHat - y_test)^2)
+pmse_r
+ridge_min$df
+
+```
+
+### Cross-validation
+
+```{r}
+cleaned_df <- 
+  Classbill |> 
+  mutate(selfMade = ifelse(selfMade, 'yes', 'no')) |> 
+  mutate(selfMade = as.factor(selfMade))
+```
+
+```{r LinearRegression}
+
+library(stats)
+library(caret)
+
+set.seed(123)
+
+predictor_cols <- c('selfMade', 'age', 'cpi_country', 'gdp_country', 'life_expectancy_country', 'total_tax_rate_country')
+
+ctrl <- trainControl(method = "cv", 
+                     number = 10)   
+
+lm_model_cv <- train(finalWorth ~ ., 
+                     data = Classbill[, c('finalWorth', predictor_cols)], 
+                     method = "lm", 
+                     trControl = ctrl)
+
+# View cross-validation results
+print(lm_model_cv)
+```
+
+```{r}
+lm_df <- 
+  Classbill |> 
+  select(-rank, -selfMade, -category)
+summary(lm(finalWorth ~ ., data = lm_df))
+
+
+```
+
+```{r LASSORegression}
+x <- as.matrix(Classbill[, predictor_cols])
+y <- Classbill$finalWorth
+
+folds <- createFolds(y, k = 10, list = TRUE, returnTrain = FALSE)
+
+lasso_cv <- cv.glmnet(x, y, alpha = 1, nfolds = 10, foldid = folds$Fold)
+
+mse_values <- lasso_cv$cvm
+
+# Display the MSE values for Lasso regression
+print("Cross-validated RMSE for Lasso regression:")
+print(sqrt(min(lasso_cv$cvm)))
+
+plot(lasso_cv)
+```
+
+```{r}
+# predictor_cols <- c('age', 'cpi_country', 'gdp_country', 'life_expectancy_country', 'total_tax_rate_country')
+
+# Prepare data
+x <- as.matrix(Classbill[, predictor_cols])
+y <- Classbill$finalWorth
+
+# Perform Ridge regression with cross-validation using cv.glmnet
+ridge_cv <- cv.glmnet(x, y, alpha = 0, lambda = seq(0.001, 1, length = 100), nfolds = 10)  # Update lambda values and nfolds as needed
+
+# Get the lambda value that minimizes cross-validated error
+best_lambda <- ridge_cv$lambda.min
+
+# Predict using the best model
+predicted_values <- predict(ridge_cv, newx = x, s = best_lambda)
+
+# Calculate RMSE
+rmse <- sqrt(mean((y - predicted_values)^2))
+
+# Display the RMSE for Ridge regression
+print("Root Mean Squared Error (RMSE) for Ridge regression:")
+print(rmse)
+```
+
+## 07. Results
+
+### Classification
+
+```{r}
+#Visual for Presentation
+resultsClassification <- data.frame(Approach = c("Logistic Regression", "KNN", "Classification Tree"), ClassificationRate = c((1-logErrorRate), (1-KNNErrorRate), (1-TreeErrorRate)))
+ggplot(data = resultsClassification) +
+  geom_bar(mapping = aes(x = Approach, y = ClassificationRate, fill = Approach), stat = "identity")
+```
+
+### Regression
+
+```{r}
+ggplot(data = data.frame(Regression_Methods = c("Linear Regression", "Ridge Regression", "Lasso Regression"), y = c(9669.946,10165.26, 10199.91))) +
+  geom_histogram(aes(x = Regression_Methods, y = y, fill = Regression_Methods), stat = "identity") +
+  ggtitle(
+    label = "Comparison between the select regression methods"
+  ) +
+  xlab("Regression Methods") +
+  ylab("RMSE") +
+  guides(fill = FALSE)
+```
