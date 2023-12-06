@@ -267,6 +267,7 @@ set.seed(123)
 
 rf_model <- randomForest(finalWorth ~ ., data = complete_data)
 
+summary(rf_model)
 # Get feature importance
 importance <- importance(rf_model)
 
@@ -700,7 +701,8 @@ print(lm_model_cv)
 ```{r}
 lm_df <- 
   Classbill |> 
-  select(-rank, -selfMade, -category)
+  select(-rank)
+
 summary(lm(finalWorth ~ ., data = lm_df))
 
 ```
@@ -762,4 +764,27 @@ ggplot(data = data.frame(Regression_Methods = c("Linear Regression", "Ridge Regr
   xlab("Regression Methods") +
   ylab("RMSE") +
   guides(fill = FALSE)
+```
+
+```{r}
+# Example dataset (replace with your actual dataset)
+set.seed(123)
+
+# outcome <- predictor_1 + predictor_2 + rnorm(n)
+# data <- data.frame(predictor_1, predictor_2, outcome)
+
+# Creating an interaction plot
+interaction.plot(x.factor = Classbill$age, 
+                 trace.factor = Classbill$selfMade, 
+                 response = data$finalWorth, 
+                 fun = mean, 
+                 xlab = "age", 
+                 ylab = "final worth", 
+                 type = "b", 
+                 legend.lab = "selfMade")
+
+```
+
+```{r}
+summary(lm(finalWorth ~ ., data = Classbill))
 ```
